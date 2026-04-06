@@ -1,0 +1,127 @@
+# Gotchas and Lessons Learned
+
+Critical operational knowledge built from real sync incidents. Read this before every sync session.
+
+## Content format issues
+
+### Notion tables are XML, not markdown
+
+Notion internally stores tables as `<table><tr><td>` XML. When using `update_content` with `old_str`, the string must match this XML format — not markdown pipe tables. Always fetch the page first to see the actual format before attempting targeted edits.
+
+On pull: if local has a markdown pipe table and Notion has XML, prefer the local format unless Notion has genuinely new table content.
+
+### Notion toggles produce non-standard markdown
+
+When pulling content from Notion, expect these artifacts:
+
+- Headings with `{toggle="true"}` attribute
+- Content wrapped in `<details>/<summary>` HTML blocks
+- `<empty-block/>` tags in empty sections
+- `<span color="...">` tags for colored text
+- Tab-indented content inside toggles (renders as code blocks in standard markdown)
+
+The `clean_notion_markdown()` function in `sync-engine.md` handles all of these. Run it on every pulled page.
+
+### Tab indentation from toggles
+
+Notion indents content inside toggles with leading tabs. In standard markdown, tabs render as code blocks — breaking the file's readability. The post-processing strips these tabs automatically, but be aware that this can affect intentionally indented content (rare).
+
+## Data loss risks
+
+### Content loss on pull
+
+If content was added locally but never pushed, pulling the Notion version will overwrite it. The 20% word-count check catches most cases, but small additions may slip through.
+
+**Prevention:** Always run a bidirectional sync (not pull-only). The change detection will classify the file as a conflict if both sides changed, giving the user a chance to review.
+
+### Silent content fabrication with subagents
+
+**Never use subagents (Agent tool) to push content to Notion.** Two failure modes discovered:
+
+1. **Content fabrication**: If a subagent can't access a file (e.g. temp files in `/tmp/`), it may generate content from training data instead of erroring — resulting in fabricated text on the Notion page.
+2. **Stale IDs produce broken links**: If page IDs are passed as hardcoded values to a subagent rather than read from the live manifest, any stale or incorrect IDs silently produce broken internal links.
+
+**Rule:** Always run sync operations in the main conversation context. Always load the manifest fresh from disk before every operation.
+
+## Property handling
+
+### Multi-select requires JSON array strings
+
+When pushing multi-select properties (category, topics, tags, etc.), the value must be a JSON array string:
+
+```
+"Category": "[\"Value1\", \"Value2\"]"
+```
+
+NOT a plain string. Plain strings silently drop all but one value. This applies to all multi-select Notion properties.
+
+### Property names are exact
+
+Notion property names include all whitespace and casing. Some databases have property names with trailing spaces (e.g. `"Tags "` with a trailing space). The property map in `config.json` must use the exact Notion property name.
+
+### Last edited time rounding
+
+Notion's `last_edited_time` is rounded to the nearest minute. Always add a 60-second buffer when comparing timestamps to avoid false negatives in change detection.
+
+## Push mechanics
+
+### replace_content vs update_content
+
+- **`replace_content`**: Replaces the entire page body. Safe and predictable, but fails if the page has child pages.
+- **`update_content`**: Targeted search-and-replace. Requires `old_str` to exactly match Notion's internal format (which may differ from what you see in markdown).
+
+Prefer `replace_content` for small-to-medium pages. Use `update_content` only when you need to preserve child pages or make surgical edits.
+
+### Child page protection
+
+Some Notion pages have child pages (sub-pages nested inside them). Using `replace_content` will fail with an error about deleting child content.
+
+Options:
+1. Include the child page reference in your `new_str` using `<page url="...">` format
+2. Use `update_content` for targeted edits only
+3. Push properties only and skip content
+4. Use `allow_deleting_content: true` (destructive — deletes child pages)
+
+Always ask the user before choosing option 4.
+
+## Search limitations
+
+### Semantic search is not exhaustive
+
+The `notion-search` tool returns max 25 results per query and uses semantic matching. A single query will miss pages.
+
+**Mitigation:** Run 3-4 diverse queries with different keywords. Deduplicate by page ID. Expect to find 70-90% of pages per sync round.
+
+Pages not found in search are NOT deleted — they just weren't surfaced. The manifest tracks all known pages regardless of search results.
+
+### New pages require search
+
+Pages added directly in Notion won't appear in the manifest until discovered through search. Run diverse queries to catch new additions.
+
+## Link conversion
+
+### Anchor links don't work in Notion
+
+Markdown `[text](#section-name)` renders as blue text in Notion that does nothing when clicked. These links are harmless but non-functional. Consider converting to bold on push if the visual is confusing.
+
+### Notion auto-converts filenames to URLs
+
+If you push content containing `[text](filename.md)` without converting to a Notion URL first, Notion may auto-convert it to `https://filename.md` — a broken external URL. Always convert local links to Notion page URLs before pushing.
+
+## Workflow safety
+
+### Never auto-commit after sync
+
+Always show the user what changed and let them review before committing. Use the `/commit` skill for consistent formatting.
+
+### Always run bidirectional sync
+
+Running pull-only or push-only misses conflicts and risks overwriting changes. Always classify changes in both directions before executing any operations.
+
+### Check for per-page asset subfolders
+
+Some synced files have associated asset subfolders (images, PDFs, HTML files) referenced from the markdown. Be aware of these when moving or renaming files.
+
+### Emoji and Unicode in Edit tool
+
+Some files contain emoji sequences or Unicode characters that the Edit tool can't match reliably. For files with known emoji content, use Python `content.replace()` as a workaround, or write the complete file using the Write tool.

@@ -1,0 +1,11 @@
+{
+  "name": "notion-sync",
+  "version": "0.1.0",
+  "description": "Bidirectional sync between Notion databases and local markdown files. Detects changes in both directions, resolves conflicts with user input, and converts content between Notion and markdown formats.",
+  "author": {
+    "name": "Monty Merlin"
+  },
+  "repository": "https://github.com/montymerlin/notion-sync-plugin",
+  "license": "MIT",
+  "keywords": ["notion", "sync", "markdown", "knowledge-base", "bidirectional"]
+}
