@@ -216,3 +216,82 @@ Titles are converted to kebab-case slugs for filenames:
 6. Collapse multiple consecutive dashes
 7. Strip leading/trailing dashes
 8. Append `.md`
+
+## Link registry
+
+The link registry provides bidirectional mapping between local files and Notion page IDs, eliminating the need for ad-hoc slug matching or title-based lookups during link conversion.
+
+### File format
+
+```json
+// .notion-sync/link-registry.json
+{
+  "by_file": {
+    "research/kwaxala.md": "33ebf304370a81ffb1dafefd9c510128"
+  },
+  "by_page": {
+    "33ebf304370a81ffb1dafefd9c510128": "research/kwaxala.md"
+  }
+}
+```
+
+### Rebuild protocol
+
+After every sync operation (pull, push, or setup), rebuild the registry:
+
+```bash
+python scripts/link_registry.py build --manifest-path .notion-sync/manifest.json
+```
+
+This walks the manifest, extracts all pages with both `local_file` and page ID, and writes both lookup directions. The rebuild is idempotent — running it multiple times produces the same result.
+
+## Push preparation pipeline
+
+The full pipeline for preparing a local file for Notion push:
+
+1. **Read** the local markdown file
+2. **Strip** YAML frontmatter (everything between `---` markers)
+3. **Convert links** using the link registry: `[text](file.md)` → `[text](https://www.notion.so/<page-id>)`
+4. **Compute hash** of the converted body (SHA-256, first 16 hex chars)
+5. **Push** the converted body to Notion
+
+Steps 1-4 are handled by `push_markdown.py`:
+
+```bash
+python scripts/push_markdown.py prepare --file research/kwaxala.md --output .notion-sync/push-staging/kwaxala.md
+```
+
+For batch operations:
+
+```bash
+python scripts/push_markdown.py batch --folders research/ report/
+```
+
+The batch command only processes files whose content hash differs from the manifest, outputting prepared bodies to `.notion-sync/push-staging/`.
+
+## Multi-folder file discovery
+
+When config has `sync_folders: ["research/", "report/"]`, file discovery walks all listed folders:
+
+```bash
+python scripts/manifest.py bootstrap --folders research/ report/
+python scripts/manifest.py discover --folders research/ report/
+```
+
+`bootstrap` matches existing files to manifest entries by `notion_id` or `title`. `discover` finds files that aren't tracked in the manifest yet.
+
+When creating new files from Notion, if multiple sync folders exist, the agent should ask the user which folder to place the file in.
+
+## replace_content vs update_content decision tree
+
+Choose the right push strategy based on the situation:
+
+| Scenario | Strategy | Why |
+|---|---|---|
+| New page or full rewrite | `replace_content` | Clean slate, no format matching issues |
+| Section-level edit | `update_content` with `old_str`/`new_str` | Preserves child pages, less disruptive |
+| Page has child pages | `update_content` only | `replace_content` will fail or delete children |
+| Content has complex Notion formatting | `update_content` | Preserving formatting you can't reproduce |
+| First push (page was empty) | `replace_content` | No existing content to preserve |
+
+When using `update_content`, always fetch the page first to get the exact current content for `old_str` matching.

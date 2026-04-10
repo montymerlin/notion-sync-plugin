@@ -125,3 +125,35 @@ Some synced files have associated asset subfolders (images, PDFs, HTML files) re
 ### Emoji and Unicode in Edit tool
 
 Some files contain emoji sequences or Unicode characters that the Edit tool can't match reliably. For files with known emoji content, use Python `content.replace()` as a workaround, or write the complete file using the Write tool.
+
+## Page discovery
+
+### Database query is exhaustive; semantic search is not
+
+Fetching a data source via `notion-fetch(id="collection://<data_source_id>")` returns all pages in the database. Semantic search returns max 25 results per query and may miss pages with unusual titles. Prefer database query for full syncs; use semantic search only as a fallback.
+
+### Validate property maps against the schema
+
+Run `notion-fetch` on the data source ID to see the full database schema, including all property names, types, and allowed options. Use this during setup to validate that the `config.json` property map uses exact Notion property names and types. This catches trailing spaces, case mismatches, and missing properties before they cause silent failures during sync.
+
+## Content hashing
+
+### Hash after link conversion, not before
+
+When pushing to Notion, the content hash must be computed on the body *after* local links have been converted to Notion URLs. This is because the converted content is what Notion stores — if you hash before conversion, the hash won't match on the next pull, causing a false "changed" detection. The `push_markdown.py` script handles this correctly.
+
+## Link conversion
+
+### Use the link registry, not ad-hoc matching
+
+The link registry (`.notion-sync/link-registry.json`) maintains a bidirectional map between local filenames and Notion page IDs. Use it for all link conversion — don't try to slugify Notion titles into filenames or manually build lookup tables. The registry is rebuilt from the manifest after every sync via `link_registry.py build`.
+
+### Short slugs vs long Notion titles
+
+Local files often use shorter slugs than Notion page titles (e.g. `berkana-two-loop.md` for "The Berkana Two Loop: Reimagining Finance — A Living Systems View"). Auto-slugifying Notion titles will not match these short slugs. The link registry solves this because it maps by page ID, not by title.
+
+## Future considerations
+
+### Notion webhooks
+
+Notion supports webhooks for real-time change notification, but these aren't available via the MCP yet. When they become available, they could replace the timestamp-polling approach for detecting Notion-side changes.

@@ -6,7 +6,7 @@ Bidirectional sync between Notion databases and local markdown files for Claude 
 
 Keeps a Notion database and a local folder of markdown files in sync. Changes flow in both directions: edit locally and push to Notion, or edit in Notion and pull to your local files. Conflicts are detected and resolved with your input — never auto-resolved.
 
-Each markdown file has YAML frontmatter that maps to Notion page properties. The sync engine tracks changes via content hashing and timestamps, so it only transfers what's actually changed.
+Each markdown file has YAML frontmatter that maps to Notion page properties. The sync engine tracks changes via content hashing and timestamps, so it only transfers what's actually changed. Multiple local folders can sync to the same Notion database.
 
 ## Skills
 
@@ -28,11 +28,14 @@ After setup, your project will have:
 ```
 your-project/
 ├── .notion-sync/
-│   ├── config.json      # Database ID, sync folder, property map (share this)
-│   └── manifest.json    # Page tracking and sync state (personal, gitignore this)
-├── research/            # (or whatever folder you chose)
-│   ├── page-one.md      # Synced files with YAML frontmatter
+│   ├── config.json          # Database ID, folders, property map (share this)
+│   ├── manifest.json        # Page tracking and sync state (personal)
+│   └── link-registry.json   # Bidirectional file↔page ID map (auto-generated)
+├── research/                # Synced folder(s)
+│   ├── page-one.md          # Synced files with YAML frontmatter
 │   ├── page-two.md
+│   └── ...
+├── report/                  # Additional synced folder (optional)
 │   └── ...
 ```
 
@@ -62,7 +65,7 @@ cp -r notion-cowork-plugin/scripts/ ~/.claude/scripts/notion-sync/
 When sharing a repo that uses notion-sync:
 
 - **Share** `config.json` — it defines the database connection and property mappings that everyone needs
-- **Gitignore** `manifest.json` — it contains personal sync timestamps and content hashes that differ per user
+- **Gitignore** `.notion-sync/` entirely if only one person runs the sync. If sharing, gitignore `manifest.json` and `link-registry.json` but track `config.json`
 - Each collaborator needs their own Notion MCP connection with access to the shared database
 - Collaborators who don't use Notion can still edit the markdown files directly and push via git — the sync is optional tooling, not a requirement
 
@@ -70,8 +73,10 @@ When sharing a repo that uses notion-sync:
 
 The `scripts/` directory contains Python utilities used by the sync engine:
 
-- **`build_markdown.py`** — builds markdown files with YAML frontmatter, parses frontmatter, generates kebab-case slugs, computes content hashes
-- **`manifest.py`** — CLI for managing the manifest (init, get, update, remove, list pages)
+- **`build_markdown.py`** — builds markdown files with YAML frontmatter from Notion data (pull direction), parses frontmatter, generates kebab-case slugs, computes content hashes
+- **`push_markdown.py`** — prepares local markdown for Notion push: strips frontmatter, converts local links to Notion URLs, computes content hash. Supports single-file and batch modes.
+- **`manifest.py`** — CLI for managing the manifest: init, get, update, remove, list, bootstrap (match local files to Notion pages), diff (dry-run change preview), discover (find untracked files)
+- **`link_registry.py`** — maintains a bidirectional map between local filenames and Notion page IDs. Handles link conversion in both directions (push and pull). Eliminates ad-hoc slug matching.
 
 These can be used standalone or by the sync skill.
 

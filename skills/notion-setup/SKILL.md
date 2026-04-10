@@ -27,16 +27,16 @@ Use `notion-search` with relevant keywords to locate the database. Confirm with 
 
 Record the **data source ID** (the 36-character UUID with dashes, or 32-character hex without).
 
-## Step 2: Identify the local folder
+## Step 2: Identify the local folder(s)
 
-Ask the user which local folder should sync with this database. Common patterns:
+Ask the user which local folder(s) should sync with this database. Multiple folders can sync to the same database. Common patterns:
 
 - `research/` — a research knowledge base
+- `report/` — report drafts
 - `docs/` — documentation
 - `notes/` — personal notes
-- A custom folder name
 
-If the folder doesn't exist, create it.
+If any folder doesn't exist, create it.
 
 ## Step 3: Map Notion properties to YAML frontmatter
 
@@ -67,7 +67,7 @@ Create a `.notion-sync/` directory in the current working directory (the repo ro
 ```json
 {
   "data_source_id": "<database-uuid>",
-  "sync_folder": "<folder-name>/",
+  "sync_folders": ["<folder-name>/"],
   "property_map": {
     "Name": { "yaml_key": "title", "type": "title" },
     "Draft": { "yaml_key": "draft", "type": "select" },
@@ -96,27 +96,37 @@ The `slug_overrides` object allows custom filename mappings for titles that don'
 
 ## Step 5: Initial population
 
-Run an initial scan of the Notion database:
+Discover all pages in the Notion database:
 
-1. Use `notion-search` with 3-4 diverse queries to discover pages (single query returns max 25 results — run multiple to cover the database)
+1. Fetch the data source to enumerate pages: `notion-fetch(id="collection://<data_source_id>")`
+   - Fallback: Run `notion-search` with 3-4 diverse queries if the database query is unavailable
 2. Deduplicate results by page ID
 3. For each page found, add an entry to the manifest with title and Notion edit timestamp
-4. Show the user: "Found N pages in the database. Ready to run first sync?"
+4. Run the bootstrap script to match existing local files to manifest entries:
+   ```bash
+   python scripts/manifest.py bootstrap --folders <sync_folders> --manifest-path .notion-sync/manifest.json
+   ```
+5. Build the link registry:
+   ```bash
+   python scripts/link_registry.py build --manifest-path .notion-sync/manifest.json
+   ```
+6. Show the user: "Found N pages, matched M to local files. Ready to run first sync?"
 
-Do NOT pull content yet — that's the job of `/notion-sync`. The setup just creates the config and manifest infrastructure.
+Do NOT pull content yet — that's the job of `/notion-sync`. The setup creates the config, manifest, and link registry infrastructure.
 
 ## Step 6: Confirm and advise
 
 Tell the user:
 
 - The sync is configured. Run `/notion-sync` to perform the first bidirectional sync.
-- Add `.notion-sync/manifest.json` to `.gitignore` if sync state (timestamps) should stay personal. Keep `config.json` tracked if the mapping should be shared with collaborators.
+- Add the entire `.notion-sync/` directory to `.gitignore` if only one person runs the sync. If sharing the property mappings with collaborators, gitignore only `manifest.json` and `link-registry.json` and track `config.json`.
 - The Notion Sync MCP connector must be available for the sync skill to work.
 
 ## Files created
 
 ```
 .notion-sync/
-├── config.json      # Database ID, folder, property mappings (shareable)
-├── manifest.json    # Page tracking, timestamps, content hashes (personal state)
+├── config.json          # Database ID, folders, property mappings (shareable)
+├── manifest.json        # Page tracking, timestamps, content hashes (personal state)
+└── link-registry.json   # Bidirectional file↔page ID map (auto-generated, personal)
 ```

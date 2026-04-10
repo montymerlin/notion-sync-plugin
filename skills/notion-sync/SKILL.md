@@ -30,24 +30,27 @@ If dirty: ask the user to commit first. Use the `/commit` skill (git-cowork plug
 
 ## Step 2: Build inventories
 
-**Local inventory:** For each file in the sync folder, compute a content hash (SHA-256 of body, excluding YAML frontmatter, first 16 hex chars). Compare to the hash stored in the manifest. If different, the file has local changes.
+**Local inventory:** Use the helper script to generate a diff preview:
+
+```bash
+python scripts/manifest.py diff --manifest-path .notion-sync/manifest.json
+```
+
+This compares content hashes and timestamps for all tracked files, returning categorised changes: `local_changed`, `notion_changed`, `conflicts`, `new_local`, and `unchanged`. For the Notion-side check, first update `last_notion_edit` timestamps from Notion (Step 2b below) before running diff.
 
 Also check YAML property fields against the manifest — property-only changes (e.g. updating draft status) count as local changes even if the body hash is the same.
 
-**Notion inventory:** Run 3-4 diverse semantic search queries via `notion-search` to discover pages:
+**Notion inventory:** For exhaustive page discovery, fetch the data source schema which returns all pages:
 
 ```
-query=" "                          # Returns ~25 recent/popular pages
-query="<domain keyword 1>"         # e.g. "finance blockchain"
-query="<domain keyword 2>"         # e.g. "community ecological"
-query="<domain keyword 3>"         # e.g. "governance protocol"
+notion-fetch(id="collection://<data_source_id>")
 ```
 
-Adapt keywords to the database's content domain. Deduplicate by page ID across queries. Expect to find ~70-90% of pages per sync — search is semantic, not exhaustive.
+This returns every page in the database — no search needed. Use this for full syncs and initial setup. For quick syncs where you only need to check specific pages, targeted `notion-fetch` calls by page ID are more efficient.
 
-For each Notion page found: compare its `last_edited_time` to the manifest's `last_synced` timestamp. Add a 60-second buffer (Notion rounds to nearest minute). If Notion is newer, the page has remote changes.
+**Fallback (if database query is slow or unavailable):** Run 3-4 diverse semantic search queries via `notion-search`. Expect ~70-90% coverage per round. Pages in the manifest but not found in search are NOT considered deleted.
 
-Pages in the manifest but not found in search are NOT considered deleted — they just weren't surfaced. Skip them in quick syncs. For full syncs, use targeted `notion-fetch` calls to check.
+For each Notion page: compare its `last_edited_time` to the manifest's `last_synced` timestamp. Add a 60-second buffer (Notion rounds to nearest minute). If Notion is newer, the page has remote changes.
 
 ## Step 3: Classify and plan
 
@@ -96,7 +99,7 @@ For each page to pull, follow the pull procedure in `references/sync-engine.md`.
 3. Extract content from `<content>` section
 4. Run post-processing to clean Notion formatting artifacts (toggles, empty blocks, span colors, tab indentation). See `references/gotchas.md` for the cleaning rules.
 5. **Content loss check**: if local file has >20% more words than the Notion version, flag for user review before overwriting
-6. Convert Notion page URLs in links back to local markdown filenames using the manifest
+6. Convert Notion page URLs to local markdown filenames using the link registry: `python scripts/link_registry.py convert-links --direction pull --content-file <pulled-content>`
 7. Build the file: YAML frontmatter + cleaned content body
 8. Write to the sync folder
 9. Update the manifest entry (timestamp, content hash)
@@ -105,12 +108,16 @@ For each page to pull, follow the pull procedure in `references/sync-engine.md`.
 
 For each page to push, follow the push procedure in `references/sync-engine.md`. In summary:
 
-1. Read local file, separate YAML frontmatter from body
-2. Convert local markdown links to Notion page URLs using the manifest
-3. Push content via `notion-update-page(page_id, command="replace_content", new_str=<body>)`
-4. Push properties via `notion-update-page(page_id, command="update_properties", properties={...})`
+1. Prepare the file for push using the helper script:
+   ```bash
+   python scripts/push_markdown.py prepare --file <path> --output .notion-sync/push-staging/<filename>
+   ```
+   This strips frontmatter, converts local links to Notion URLs via the link registry, and computes the content hash.
+2. Push content via `notion-update-page(page_id, command="replace_content", new_str=<prepared body>)`
+   - For surgical edits to large pages, prefer `update_content` with targeted `old_str`/`new_str` pairs — this avoids replacing the entire page and is safer when child pages exist.
+3. Push properties via `notion-update-page(page_id, command="update_properties", properties={...})`
    - Multi-select properties MUST be pushed as JSON array strings: `'["value1", "value2"]'`
-5. Update manifest entry and local file's `last_synced` in frontmatter
+4. Update manifest entry and local file's `last_synced` in frontmatter
 
 If push fails due to child pages, tell the user and offer options (see `references/gotchas.md`).
 
@@ -118,18 +125,23 @@ If push fails due to child pages, tell the user and offer options (see `referenc
 
 For pages found in Notion but not in the manifest:
 
-1. Generate a kebab-case filename from the title
-2. Pull content and properties (same as Step 5)
-3. Write the new file
-4. Add to manifest
+1. Generate a kebab-case filename from the title (use slug overrides from config if applicable)
+2. If config has multiple `sync_folders`, ask the user which folder to place the new file in
+3. Pull content and properties (same as Step 5)
+4. Write the new file to the chosen folder
+5. Add to manifest
 
 ## Step 8: Summary and commit
 
 1. Show the user a summary of all changes made
 2. Update `last_full_sync` timestamp in the manifest
-3. Ask the user to review changes before committing
-4. Use the `/commit` skill — never auto-commit
-5. If the project uses an auto-generated index (like INDEX.md), remind the user to regenerate it
+3. Rebuild the link registry to reflect any new or changed mappings:
+   ```bash
+   python scripts/link_registry.py build --manifest-path .notion-sync/manifest.json
+   ```
+4. Ask the user to review changes before committing
+5. Use the `/commit` skill — never auto-commit
+6. If the project uses an auto-generated index (like INDEX.md), remind the user to regenerate it
 
 ## Important notes
 
@@ -137,3 +149,6 @@ For pages found in Notion but not in the manifest:
 - **Never use subagents to push content to Notion** — this has caused silent content fabrication and broken links. See gotchas.
 - **Always load the manifest fresh** from `.notion-sync/manifest.json` — never cache or hardcode page IDs.
 - **Multi-select properties** require JSON array strings on push — plain strings silently drop values.
+- **Use helper scripts for link conversion and push preparation** — `link_registry.py` and `push_markdown.py` eliminate ad-hoc scripting and reduce errors.
+- **Content hash timing matters** — always compute the hash *after* link conversion, since converted content is what Notion stores. The `push_markdown.py` script handles this correctly.
+- **`replace_content` vs `update_content`:** Use `replace_content` for full page updates; use `update_content` with `old_str`/`new_str` for surgical edits when the page has child pages or you only changed specific sections.
