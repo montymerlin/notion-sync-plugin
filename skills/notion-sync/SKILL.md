@@ -1,5 +1,5 @@
 ---
-name: notion-sync
+name: notion:sync
 description: >
   Bidirectional sync between a Notion database and local markdown files. Use when the
   user says "sync", "notion sync", "pull from notion", "push to notion", "check notion

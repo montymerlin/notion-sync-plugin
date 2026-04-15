@@ -1,5 +1,5 @@
 ---
-name: notion-setup
+name: notion:setup
 description: >
   Set up bidirectional Notion sync in the current folder. Use when the user says
   "set up notion sync", "connect notion", "configure notion sync", "link this folder
