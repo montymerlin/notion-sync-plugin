@@ -1,4 +1,4 @@
-# Roadmap — notion-cowork
+# Roadmap — notion-sync
 
 Where this plugin could go. Items here are aspirations, not commitments — a place to capture ideas and future directions.
 

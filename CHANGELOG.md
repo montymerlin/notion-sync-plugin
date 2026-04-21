@@ -1,4 +1,4 @@
-# Changelog — notion-cowork
+# Changelog — notion-sync
 
 A narrative record of how this plugin evolves. Updated after significant work sessions, not per-commit.
 

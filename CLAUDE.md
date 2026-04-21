@@ -1,13 +1,13 @@
-# CLAUDE.md — notion-cowork
+# CLAUDE.md — notion-sync
 
 Bidirectional sync between Notion databases and local markdown files for Claude Cowork.
 
 ## Project Identity
 
-- **Name:** notion-cowork
+- **Name:** notion-sync
 - **Stack:** Python scripts + Markdown skill specs (zero external dependencies — stdlib only)
 - **Purpose:** Keep a Notion database and local markdown folders in sync — changes flow both directions with conflict detection and user-driven resolution
-- **Repository:** https://github.com/montymerlin/notion-cowork-plugin
+- **Repository:** https://github.com/montymerlin/notion-sync-plugin
 
 ## Directory Structure
 
@@ -42,7 +42,7 @@ notion-sync-plugin/
 
 This plugin supports two installation paths:
 
-- **Claude Code CLI:** `claude plugins install github.com/montymerlin/notion-cowork-plugin` (uses `marketplace.json`)
+- **Claude Code CLI:** `claude plugins install github.com/montymerlin/notion-sync-plugin` (uses `marketplace.json`)
 - **Claude Cowork (desktop):** Package as `.plugin` zip and drag into Cowork chat, or install from the plugin marketplace
 
 Both paths load the same skills and scripts. The primary deliverables are SKILL.md files (agent instructions) and Python helper scripts. There is no build step, no package manager, no test framework. Quality comes from clear instructions and correct scripts.

@@ -1,4 +1,4 @@
-# Decisions — notion-cowork
+# Decisions — notion-sync
 
 Architectural decisions for this plugin, logged in a lightweight ADR format. Each entry captures the context, the choice made, and its consequences.
 
@@ -103,7 +103,7 @@ Architectural decisions for this plugin, logged in a lightweight ADR format. Eac
 **Decision:** Add `.claude-plugin/marketplace.json`, add a Distribution section to CLAUDE.md (replacing the "This is a Cowork plugin" heading), and update the directory structure listing. The README already had dual-install instructions so only minor consistency fixes were needed there.
 
 **Consequences:**
-- Users can install via `claude plugins install github.com/montymerlin/notion-cowork-plugin`
+- Users can install via `claude plugins install github.com/montymerlin/notion-sync-plugin`
 - CLAUDE.md no longer contradicts README on host support
 - marketplace.json version must stay in sync with plugin.json on each release
 

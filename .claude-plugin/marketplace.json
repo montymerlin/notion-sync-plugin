@@ -1,18 +1,18 @@
 {
-  "name": "notion-cowork",
+  "name": "notion-sync",
   "owner": {
     "name": "Monty Merlin"
   },
   "plugins": [
     {
-      "name": "notion-cowork",
+      "name": "notion-sync",
       "source": "./",
-      "description": "Bidirectional sync between Notion databases and local markdown files — guided setup, change detection, conflict resolution, and content format conversion.",
-      "version": "0.2.1",
+      "description": "Bidirectional sync between Notion databases and local markdown files — guided setup, change detection, conflict resolution, and content format conversion. Works in Claude Code and Claude Cowork.",
+      "version": "0.2.2",
       "author": {
         "name": "Monty Merlin"
       },
-      "repository": "https://github.com/montymerlin/notion-cowork-plugin",
+      "repository": "https://github.com/montymerlin/notion-sync-plugin",
       "license": "MIT",
       "category": "productivity",
       "tags": ["notion", "sync", "markdown", "knowledge-base", "bidirectional"]

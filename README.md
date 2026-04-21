@@ -1,4 +1,4 @@
-# notion-cowork
+# notion-sync
 
 Bidirectional sync between Notion databases and local markdown files for Claude Cowork.
 
@@ -55,9 +55,9 @@ Open the `.plugin` file in Claude Desktop, or install from the plugin marketplac
 Copy the skills to your global or project skills directory:
 
 ```bash
-git clone https://github.com/montymerlin/notion-cowork-plugin.git
-cp -r notion-cowork-plugin/skills/* ~/.claude/skills/
-cp -r notion-cowork-plugin/scripts/ ~/.claude/scripts/notion-sync/
+git clone https://github.com/montymerlin/notion-sync-plugin.git
+cp -r notion-sync-plugin/skills/* ~/.claude/skills/
+cp -r notion-sync-plugin/scripts/ ~/.claude/scripts/notion-sync/
 ```
 
 ## Collaboration notes
