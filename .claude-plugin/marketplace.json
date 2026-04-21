@@ -1,0 +1,21 @@
+{
+  "name": "notion-cowork",
+  "owner": {
+    "name": "Monty Merlin"
+  },
+  "plugins": [
+    {
+      "name": "notion-cowork",
+      "source": "./",
+      "description": "Bidirectional sync between Notion databases and local markdown files — guided setup, change detection, conflict resolution, and content format conversion.",
+      "version": "0.2.1",
+      "author": {
+        "name": "Monty Merlin"
+      },
+      "repository": "https://github.com/montymerlin/notion-cowork-plugin",
+      "license": "MIT",
+      "category": "productivity",
+      "tags": ["notion", "sync", "markdown", "knowledge-base", "bidirectional"]
+    }
+  ]
+}

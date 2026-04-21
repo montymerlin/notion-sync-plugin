@@ -1,6 +1,6 @@
 {
   "name": "notion-cowork",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Notion toolkit for Claude Cowork. Bidirectional sync between Notion databases and local markdown files — with guided setup, change detection, conflict resolution, and content format conversion.",
   "author": {
     "name": "Monty Merlin"

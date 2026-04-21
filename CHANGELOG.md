@@ -4,6 +4,12 @@ A narrative record of how this plugin evolves. Updated after significant work se
 
 ---
 
+## 2026-04-21 — v0.2.1: Dual-distribution packaging
+
+Added `marketplace.json` for Claude Code CLI installation via `claude plugins install`. Replaced the "This is a Cowork plugin" section in CLAUDE.md with a Distribution section covering both Claude Code CLI and Cowork install paths. Resolved the inconsistency where CLAUDE.md said "Cowork plugin" while README already showed dual-host installation. See Decision 006.
+
+---
+
 ## 2026-04-10 — v0.2.0: Link registry, push scripts, multi-folder sync
 
 Major upgrade based on learnings from the first real-world sync session (Bridging Worlds research commons, 46 pages). The session revealed that link conversion, initial population, and push preparation all required extensive ad-hoc scripting — this release eliminates that.

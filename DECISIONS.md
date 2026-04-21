@@ -91,4 +91,23 @@ Architectural decisions for this plugin, logged in a lightweight ADR format. Eac
 - Batch mode enables efficient multi-file syncs
 - Agent no longer needs to write custom Python for each push
 
+---
+
+## Decision 006: Dual-distribution packaging with marketplace.json (2026-04-21)
+
+**Status:** Accepted
+**Date:** 2026-04-21
+
+**Context:** The plugin CLAUDE.md positioned it as a "Cowork plugin" while the README already showed both Cowork and Claude Code CLI installation paths. This inconsistency needed resolving. Additionally, no marketplace.json existed for Claude Code CLI's `claude plugins install` command.
+
+**Decision:** Add `.claude-plugin/marketplace.json`, add a Distribution section to CLAUDE.md (replacing the "This is a Cowork plugin" heading), and update the directory structure listing. The README already had dual-install instructions so only minor consistency fixes were needed there.
+
+**Consequences:**
+- Users can install via `claude plugins install github.com/montymerlin/notion-cowork-plugin`
+- CLAUDE.md no longer contradicts README on host support
+- marketplace.json version must stay in sync with plugin.json on each release
+
+**Alternatives Considered:**
+- *Keep Cowork-only positioning* — rejected. README already documented Claude Code CLI installation; the CLAUDE.md just hadn't caught up
+
 <!-- Agentic Scaffold v0.1.0 | adapted for Cowork plugin conventions -->

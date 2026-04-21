@@ -5,15 +5,17 @@ Bidirectional sync between Notion databases and local markdown files for Claude 
 ## Project Identity
 
 - **Name:** notion-cowork
-- **Stack:** Python scripts + Markdown skill specs (Cowork plugin, zero runtime dependencies)
+- **Stack:** Python scripts + Markdown skill specs (zero external dependencies — stdlib only)
 - **Purpose:** Keep a Notion database and local markdown folders in sync — changes flow both directions with conflict detection and user-driven resolution
+- **Repository:** https://github.com/montymerlin/notion-cowork-plugin
 
 ## Directory Structure
 
 ```
 notion-sync-plugin/
 ├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest (name, version, metadata)
+│   ├── plugin.json              # Plugin manifest (name, version, metadata)
+│   └── marketplace.json         # Self-hosted marketplace listing
 ├── skills/
 │   ├── notion-setup/
 │   │   └── SKILL.md             # First-time configuration workflow
@@ -36,9 +38,16 @@ notion-sync-plugin/
 
 ## Key Conventions
 
-### This is a Cowork plugin
+### Distribution
 
-The primary deliverables are SKILL.md files (agent instructions) and Python helper scripts. There is no build step, no package manager, no test framework. Quality comes from clear instructions and correct scripts.
+This plugin supports two installation paths:
+
+- **Claude Code CLI:** `claude plugins install github.com/montymerlin/notion-cowork-plugin` (uses `marketplace.json`)
+- **Claude Cowork (desktop):** Package as `.plugin` zip and drag into Cowork chat, or install from the plugin marketplace
+
+Both paths load the same skills and scripts. The primary deliverables are SKILL.md files (agent instructions) and Python helper scripts. There is no build step, no package manager, no test framework. Quality comes from clear instructions and correct scripts.
+
+**Auto-update:** Claude Code pins to a commit SHA at install time; users update manually or via marketplace sync. Cowork requires re-uploading the `.plugin` file or GitHub sync if configured at the organization level.
 
 ### Naming
 - Files: kebab-case for documents, snake_case for Python scripts
