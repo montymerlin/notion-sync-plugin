@@ -228,15 +228,16 @@ def markdown_to_blocks(markdown: str) -> list:
 def _clear_page_blocks(page_id: str, token: str) -> int:
     """Delete all existing blocks from a page, skipping archived ones."""
     deleted = skipped = 0
-    seen_ids: set = set()
+    cursor = None
     while True:
-        result = _notion_request("GET", f"/blocks/{page_id}/children", token)
+        path = f"/blocks/{page_id}/children"
+        if cursor:
+            path += f"?start_cursor={cursor}"
+        result = _notion_request("GET", path, token)
         blocks = result.get("results", [])
-        new_blocks = [b for b in blocks if b["id"] not in seen_ids]
-        if not new_blocks:
+        if not blocks:
             break
-        for block in new_blocks:
-            seen_ids.add(block["id"])
+        for block in blocks:
             if block.get("archived", False):
                 skipped += 1
                 continue
@@ -248,7 +249,9 @@ def _clear_page_blocks(page_id: str, token: str) -> int:
                     skipped += 1
                 else:
                     raise
-        if not result.get("has_more"):
+        if result.get("has_more"):
+            cursor = result.get("next_cursor")
+        else:
             break
     return deleted
 
@@ -283,6 +286,10 @@ def cmd_push_content(args):
     token = _load_token()
     if not token:
         print("Error: NOTION_TOKEN not found.\nAdd it to .notion-sync/.env — run /notion-setup for instructions.", file=sys.stderr)
+        sys.exit(1)
+
+    if not args.file:
+        print("Error: --file is required for live push", file=sys.stderr)
         sys.exit(1)
 
     if not args.page_id:
