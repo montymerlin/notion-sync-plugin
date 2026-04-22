@@ -4,6 +4,12 @@ A narrative record of how this plugin evolves. Updated after significant work se
 
 ---
 
+## 2026-04-22 — v0.2.2: Audit fixes
+
+Reordered ROADMAP Decided section chronologically (001→006). Added Decision 006 (dual-distribution packaging) to the Decided section, which was missing despite the decision existing in DECISIONS.md. No functional changes.
+
+---
+
 ## 2026-04-21 — v0.2.1: Dual-distribution packaging
 
 Added `marketplace.json` for Claude Code CLI installation via `claude plugins install`. Replaced the "This is a Cowork plugin" section in CLAUDE.md with a Distribution section covering both Claude Code CLI and Cowork install paths. Resolved the inconsistency where CLAUDE.md said "Cowork plugin" while README already showed dual-host installation. See Decision 006.
