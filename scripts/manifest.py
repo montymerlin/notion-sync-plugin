@@ -42,30 +42,40 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from build_markdown import parse_frontmatter, content_hash
+from link_registry import LinkRegistry
 
 
 DEFAULT_MANIFEST_PATH = ".notion-sync/manifest.json"
 
 
-def load_manifest(path: str) -> dict:
-    """Load manifest from file, or return empty structure."""
-    p = Path(path)
-    if p.exists():
-        with open(p, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {
-        "data_source_id": None,
-        "last_full_sync": None,
-        "pages": {}
-    }
-
-
 def save_manifest(manifest: dict, path: str):
     """Save manifest to file, creating parent dirs if needed."""
+    manifest.setdefault("version", 2)
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+
+def load_manifest(path: str) -> dict:
+    """Load manifest from file. Auto-migrates v1 → v2 format."""
+    p = Path(path)
+    if p.exists():
+        with open(p, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        if manifest.get("version", 1) < 2:
+            manifest["version"] = 2
+            for page_entry in manifest.get("pages", {}).values():
+                if "properties" not in page_entry:
+                    page_entry["properties"] = {}
+            save_manifest(manifest, path)
+        return manifest
+    return {
+        "version": 2,
+        "data_source_id": None,
+        "last_full_sync": None,
+        "pages": {}
+    }
 
 
 def now_iso() -> str:
@@ -97,12 +107,14 @@ def cmd_get(args):
 def cmd_update(args):
     manifest = load_manifest(args.manifest_path)
     synced_at = now_iso()
+    existing = manifest.get("pages", {}).get(args.page_id, {})
     manifest["pages"][args.page_id] = {
         "local_file": args.local_file,
         "title": args.title,
         "last_notion_edit": args.last_notion_edit,
         "last_synced": synced_at,
-        "content_hash": args.content_hash or ""
+        "content_hash": args.content_hash or "",
+        "properties": existing.get("properties", {})
     }
     save_manifest(manifest, args.manifest_path)
     print(json.dumps({"status": "updated", "page_id": args.page_id, "synced_at": synced_at}))
@@ -194,6 +206,8 @@ def cmd_bootstrap(args):
                 pages[matched_page_id]["local_file"] = local_file_rel
                 pages[matched_page_id]["content_hash"] = computed_hash
                 pages[matched_page_id]["last_synced"] = pages[matched_page_id].get("last_notion_edit", now_iso())
+                if "properties" not in pages[matched_page_id]:
+                    pages[matched_page_id]["properties"] = {}
 
                 matched += 1
                 if title and title in unmatched_notion:
@@ -212,48 +226,80 @@ def cmd_bootstrap(args):
     }))
 
 
+def _property_diff(local_front: dict, manifest_props: dict, property_map: dict) -> dict:
+    """Compare local frontmatter to manifest property snapshot.
+    Returns {yaml_key: {"was": old_val, "now": new_val}} for changed fields.
+    """
+    diff = {}
+    for notion_prop, prop_config in property_map.items():
+        yaml_key = prop_config.get("yaml_key")
+        if not yaml_key or yaml_key in ("title", "notion_id", "created", "last_edited", "last_synced"):
+            continue
+        local_val = local_front.get(yaml_key)
+        manifest_val = manifest_props.get(yaml_key)
+        # Normalise lists for comparison
+        lv = tuple(sorted(local_val)) if isinstance(local_val, list) else local_val
+        mv = tuple(sorted(manifest_val)) if isinstance(manifest_val, list) else manifest_val
+        if lv != mv:
+            diff[yaml_key] = {"was": manifest_val, "now": local_val}
+    return diff
+
+
 def cmd_diff(args):
-    """Show differences between local and manifest state."""
+    """Show differences between local and manifest state, with property-level detail."""
     manifest = load_manifest(args.manifest_path)
     pages = manifest.get("pages", {})
+
+    # Load property_map from config.json (sibling of manifest)
+    config_path = Path(args.manifest_path).parent / "config.json"
+    property_map = {}
+    if config_path.exists():
+        with open(config_path, encoding="utf-8") as f:
+            property_map = json.load(f).get("property_map", {})
+
+    # Registry freshness check
+    registry_path = Path(args.manifest_path).parent / "link-registry.json"
+    manifest_p = Path(args.manifest_path)
+    registry_stale = (
+        not registry_path.exists() or
+        (manifest_p.exists() and registry_path.stat().st_mtime < manifest_p.stat().st_mtime)
+    )
+    if registry_stale:
+        lr = LinkRegistry(registry_path=registry_path, manifest_path=manifest_p)
+        lr.build()
 
     local_changed = []
     notion_changed = []
     conflicts = []
     new_local = []
     unchanged = 0
-
-    # Track which local files we've seen
     seen_local_files = set()
 
     for page_id, page_info in pages.items():
         local_file = page_info.get("local_file")
         if not local_file:
             continue
-
         local_path = Path(local_file)
         if not local_path.exists():
             continue
-
         seen_local_files.add(local_file)
 
-        # Recompute hash of local file body
-        props, content = parse_frontmatter(str(local_path))
-        if props is None:
-            content_body = content
-        else:
-            content_body = content
+        props, content_body = parse_frontmatter(str(local_path))
 
+        # Property diff
+        manifest_props = page_info.get("properties", {})
+        prop_diff = _property_diff(props or {}, manifest_props, property_map)
+        props_changed = bool(prop_diff)
+
+        # Content diff
         computed_hash = content_hash(content_body)
         stored_hash = page_info.get("content_hash", "")
+        content_changed = computed_hash != stored_hash
 
+        # Notion-side timestamp check
         stored_last_notion = page_info.get("last_notion_edit", "")
         stored_last_synced = page_info.get("last_synced", "")
-
-        local_changed_flag = computed_hash != stored_hash
         notion_changed_flag = False
-
-        # Check if Notion is newer (with 60s buffer)
         if stored_last_notion and stored_last_synced:
             try:
                 notion_dt = datetime.fromisoformat(stored_last_notion.replace("Z", "+00:00"))
@@ -262,18 +308,30 @@ def cmd_diff(args):
             except (ValueError, AttributeError):
                 pass
 
+        # Determine push_target
+        if props_changed and content_changed:
+            push_target = "both"
+        elif props_changed:
+            push_target = "properties_only"
+        elif content_changed:
+            push_target = "content_only"
+        else:
+            push_target = "none"
+
+        local_changed_flag = props_changed or content_changed
+        entry = {
+            "page_id": page_id,
+            "local_file": local_file,
+            "title": page_info.get("title", ""),
+            "push_target": push_target,
+            "property_diff": prop_diff,
+            "content_changed": content_changed,
+        }
+
         if local_changed_flag and notion_changed_flag:
-            conflicts.append({
-                "page_id": page_id,
-                "local_file": local_file,
-                "title": page_info.get("title", "")
-            })
+            conflicts.append(entry)
         elif local_changed_flag:
-            local_changed.append({
-                "page_id": page_id,
-                "local_file": local_file,
-                "title": page_info.get("title", "")
-            })
+            local_changed.append(entry)
         elif notion_changed_flag:
             notion_changed.append({
                 "page_id": page_id,
@@ -283,17 +341,12 @@ def cmd_diff(args):
         else:
             unchanged += 1
 
-    # Find new local files not in manifest
-    # Walk all folders that have sync folders configured
-    all_local_files = set()
-
-    # Detect sync folders from existing local_file paths
+    # New local files
     sync_folders = set()
     for page_info in pages.values():
-        local_file = page_info.get("local_file", "")
-        if local_file:
-            # Infer the base folder (research/, report/, etc)
-            parts = Path(local_file).parts
+        lf = page_info.get("local_file", "")
+        if lf:
+            parts = Path(lf).parts
             if len(parts) > 1:
                 sync_folders.add(str(Path(parts[0])))
 
@@ -301,11 +354,8 @@ def cmd_diff(args):
         folder_path = Path(folder)
         if folder_path.exists():
             for md_file in folder_path.glob("**/*.md"):
-                all_local_files.add(str(md_file))
-
-    for local_file in all_local_files:
-        if local_file not in seen_local_files:
-            new_local.append(local_file)
+                if str(md_file) not in seen_local_files:
+                    new_local.append(str(md_file))
 
     print(json.dumps({
         "local_changed": local_changed,
