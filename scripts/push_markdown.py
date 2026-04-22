@@ -35,6 +35,282 @@ from typing import Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 from link_registry import LinkRegistry
 
+NOTION_API_BASE = "https://api.notion.com/v1"
+NOTION_VERSION = "2022-06-28"
+BLOCK_BATCH_SIZE = 100
+
+
+def _load_token(base_path: str = ".notion-sync") -> Optional[str]:
+    """Load NOTION_TOKEN from .notion-sync/.env, .env, or environment."""
+    for env_path in [Path(base_path) / ".env", Path(".env")]:
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, _, v = line.partition("=")
+                    if k.strip() == "NOTION_TOKEN":
+                        return v.strip()
+    return os.environ.get("NOTION_TOKEN")
+
+
+def _notion_request(method: str, path: str, token: str, body: Optional[dict] = None) -> dict:
+    """Make an authenticated Notion API request."""
+    url = f"{NOTION_API_BASE}{path}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type": "application/json",
+    }
+    data = json.dumps(body).encode("utf-8") if body else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        raise RuntimeError(f"Notion API error {e.code}: {error_body}") from e
+
+
+def _markdown_line_to_rich_text(line: str) -> list:
+    """Convert inline markdown to Notion rich_text array."""
+    parts = []
+    pattern = r'(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^\)]+\)|[^*`\[]+)'
+    for m in re.finditer(pattern, line):
+        chunk = m.group(0)
+        if chunk.startswith("**") and chunk.endswith("**"):
+            parts.append({"type": "text", "text": {"content": chunk[2:-2]},
+                          "annotations": {"bold": True}})
+        elif chunk.startswith("*") and chunk.endswith("*"):
+            parts.append({"type": "text", "text": {"content": chunk[1:-1]},
+                          "annotations": {"italic": True}})
+        elif chunk.startswith("`") and chunk.endswith("`"):
+            parts.append({"type": "text", "text": {"content": chunk[1:-1]},
+                          "annotations": {"code": True}})
+        elif chunk.startswith("["):
+            link_m = re.match(r'\[([^\]]+)\]\(([^\)]+)\)', chunk)
+            if link_m:
+                text, url = link_m.group(1), link_m.group(2)
+                if url.startswith("http://") or url.startswith("https://"):
+                    parts.append({"type": "text", "text": {"content": text, "link": {"url": url}}})
+                else:
+                    parts.append({"type": "text", "text": {"content": text}})
+            else:
+                parts.append({"type": "text", "text": {"content": chunk}})
+        else:
+            if chunk:
+                parts.append({"type": "text", "text": {"content": chunk}})
+    return parts or [{"type": "text", "text": {"content": ""}}]
+
+
+def markdown_to_blocks(markdown: str) -> list:
+    """Convert markdown body to Notion block objects."""
+    blocks = []
+    lines = markdown.split("\n")
+    i = 0
+    table_rows = []
+    in_table = False
+
+    def flush_table():
+        if not table_rows:
+            return
+        max_cols = max(len(r) for r in table_rows)
+        rows_data = []
+        for row in table_rows:
+            cells_data = [_markdown_line_to_rich_text(cell) for cell in row]
+            while len(cells_data) < max_cols:
+                cells_data.append([{"type": "text", "text": {"content": ""}}])
+            rows_data.append({"type": "table_row", "table_row": {"cells": cells_data}})
+        blocks.append({
+            "type": "table",
+            "table": {
+                "table_width": max_cols,
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": rows_data,
+            }
+        })
+
+    while i < len(lines):
+        line = lines[i]
+
+        # Table row
+        if line.strip().startswith("|") and "|" in line[1:]:
+            if re.match(r'^\s*\|[\s\-|:]+\|\s*$', line):
+                i += 1
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if not in_table:
+                in_table = True
+                table_rows = []
+            table_rows.append(cells)
+            i += 1
+            continue
+        elif in_table:
+            in_table = False
+            flush_table()
+            table_rows = []
+
+        if re.match(r'^# .+', line):
+            text = re.sub(r'\s*\{#[^}]+\}', '', line[2:].strip())
+            blocks.append({"type": "heading_1", "heading_1": {"rich_text": _markdown_line_to_rich_text(text)}})
+        elif re.match(r'^## .+', line):
+            text = re.sub(r'\s*\{#[^}]+\}', '', line[3:].strip())
+            blocks.append({"type": "heading_2", "heading_2": {"rich_text": _markdown_line_to_rich_text(text)}})
+        elif re.match(r'^### .+', line):
+            text = re.sub(r'\s*\{#[^}]+\}', '', line[4:].strip())
+            blocks.append({"type": "heading_3", "heading_3": {"rich_text": _markdown_line_to_rich_text(text)}})
+        elif re.match(r'^---+\s*$', line):
+            blocks.append({"type": "divider", "divider": {}})
+        elif line.startswith("> "):
+            blocks.append({"type": "quote", "quote": {"rich_text": _markdown_line_to_rich_text(line[2:].strip())}})
+        elif re.match(r'^\d+\. .+', line):
+            text = re.sub(r'^\d+\. ', '', line).strip()
+            blocks.append({"type": "numbered_list_item", "numbered_list_item": {"rich_text": _markdown_line_to_rich_text(text)}})
+        elif re.match(r'^[-*] .+', line):
+            text = re.sub(r'^[-*] ', '', line).strip()
+            blocks.append({"type": "bulleted_list_item", "bulleted_list_item": {"rich_text": _markdown_line_to_rich_text(text)}})
+        elif re.match(r'^!\[', line):
+            img_m = re.match(r'^!\[([^\]]*)\]\(([^\)]+)\)', line)
+            if img_m:
+                alt, url = img_m.group(1), img_m.group(2)
+                if url.startswith("http"):
+                    blocks.append({"type": "image", "image": {"type": "external", "external": {"url": url}}})
+                else:
+                    blocks.append({
+                        "type": "callout",
+                        "callout": {
+                            "rich_text": [
+                                {"type": "text", "text": {"content": "Image placeholder — upload manually: "}, "annotations": {"bold": True}},
+                                {"type": "text", "text": {"content": url}, "annotations": {"code": True}},
+                                {"type": "text", "text": {"content": f"\nAlt: {alt}"}},
+                            ],
+                            "icon": {"type": "emoji", "emoji": "🖼️"},
+                            "color": "yellow_background",
+                        }
+                    })
+        elif line.startswith("```"):
+            lang = line[3:].strip()
+            code_lines = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith("```"):
+                code_lines.append(lines[i])
+                i += 1
+            code_content = "\n".join(code_lines)
+            if len(code_content) > 1990:
+                code_content = code_content[:1990] + "\n[truncated]"
+            blocks.append({"type": "code", "code": {
+                "rich_text": [{"type": "text", "text": {"content": code_content}}],
+                "language": lang or "plain text",
+            }})
+        elif line.strip() == "":
+            pass
+        else:
+            text = line.strip()
+            while len(text) > 2000:
+                chunk = text[:2000]
+                last_space = chunk.rfind(" ")
+                if last_space > 1500:
+                    chunk = chunk[:last_space]
+                blocks.append({"type": "paragraph", "paragraph": {"rich_text": _markdown_line_to_rich_text(chunk)}})
+                text = text[len(chunk):].strip()
+            if text:
+                blocks.append({"type": "paragraph", "paragraph": {"rich_text": _markdown_line_to_rich_text(text)}})
+
+        i += 1
+
+    # Flush trailing table
+    if in_table and table_rows:
+        flush_table()
+
+    return blocks
+
+
+def _clear_page_blocks(page_id: str, token: str) -> int:
+    """Delete all existing blocks from a page, skipping archived ones."""
+    deleted = skipped = 0
+    seen_ids: set = set()
+    while True:
+        result = _notion_request("GET", f"/blocks/{page_id}/children", token)
+        blocks = result.get("results", [])
+        new_blocks = [b for b in blocks if b["id"] not in seen_ids]
+        if not new_blocks:
+            break
+        for block in new_blocks:
+            seen_ids.add(block["id"])
+            if block.get("archived", False):
+                skipped += 1
+                continue
+            try:
+                _notion_request("DELETE", f"/blocks/{block['id']}", token)
+                deleted += 1
+            except RuntimeError as e:
+                if "archived" in str(e).lower():
+                    skipped += 1
+                else:
+                    raise
+        if not result.get("has_more"):
+            break
+    return deleted
+
+
+def _push_blocks(page_id: str, blocks: list, token: str) -> int:
+    """Append blocks to a page in batches of 100. Returns total pushed."""
+    pushed = 0
+    for start in range(0, len(blocks), BLOCK_BATCH_SIZE):
+        batch = blocks[start:start + BLOCK_BATCH_SIZE]
+        _notion_request("PATCH", f"/blocks/{page_id}/children", token, {"children": batch})
+        pushed += len(batch)
+        print(f"  Pushed blocks {start + 1}–{start + len(batch)}", file=sys.stderr)
+    return pushed
+
+
+def cmd_push_content(args):
+    """Handle 'push-content' subcommand: push staging file to Notion via Blocks API."""
+    if args.dry_run:
+        if args.file:
+            file_path = Path(args.file)
+            if not file_path.exists():
+                print(json.dumps({"error": f"file not found: {args.file}"}), file=sys.stderr)
+                sys.exit(1)
+            markdown = file_path.read_text(encoding="utf-8")
+        else:
+            markdown = sys.stdin.read()
+        blocks = markdown_to_blocks(markdown)
+        print(json.dumps({"dry_run": True, "blocks": len(blocks)}))
+        return
+
+    # Live push
+    token = _load_token()
+    if not token:
+        print("Error: NOTION_TOKEN not found.\nAdd it to .notion-sync/.env — run /notion-setup for instructions.", file=sys.stderr)
+        sys.exit(1)
+
+    if not args.page_id:
+        print("Error: --page-id is required for live push", file=sys.stderr)
+        sys.exit(1)
+
+    file_path = Path(args.file)
+    if not file_path.exists():
+        print(json.dumps({"error": f"file not found: {args.file}"}), file=sys.stderr)
+        sys.exit(1)
+
+    page_id = args.page_id.replace("-", "")
+    markdown = file_path.read_text(encoding="utf-8")
+    blocks = markdown_to_blocks(markdown)
+
+    print(f"Clearing existing page content...", file=sys.stderr)
+    deleted = _clear_page_blocks(page_id, token)
+    print(f"  Deleted {deleted} blocks", file=sys.stderr)
+
+    print(f"Pushing {len(blocks)} blocks...", file=sys.stderr)
+    pushed = _push_blocks(page_id, blocks, token)
+
+    if args.lock:
+        _notion_request("PATCH", f"/pages/{page_id}", token, {"locked": True})
+        print("  Page locked", file=sys.stderr)
+
+    print(json.dumps({"status": "pushed", "page_id": page_id, "blocks_pushed": pushed}))
+
 
 def strip_frontmatter(content: str) -> str:
     """Strip YAML frontmatter (--- ... ---) from markdown."""
@@ -209,6 +485,31 @@ def main():
         help="Output directory for prepared files (default: .notion-sync/push-staging/)",
     )
     batch_parser.set_defaults(func=cmd_batch)
+
+    # 'push-content' subcommand
+    push_content_parser = subparsers.add_parser(
+        "push-content",
+        help="Push prepared staging file to Notion via direct Blocks API",
+    )
+    push_content_parser.add_argument(
+        "--page-id",
+        help="Notion page ID (32-char hex). Required unless --dry-run.",
+    )
+    push_content_parser.add_argument(
+        "--file",
+        help="Path to prepared staging file (from 'prepare' subcommand)",
+    )
+    push_content_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Parse and count blocks without making any API calls",
+    )
+    push_content_parser.add_argument(
+        "--lock",
+        action="store_true",
+        help="Lock the Notion page after push",
+    )
+    push_content_parser.set_defaults(func=cmd_push_content)
 
     args = parser.parse_args()
 
