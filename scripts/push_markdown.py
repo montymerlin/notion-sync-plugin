@@ -30,7 +30,7 @@ import sys
 import urllib.request
 import urllib.error
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).parent))
 from link_registry import LinkRegistry
