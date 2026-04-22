@@ -328,6 +328,33 @@ def strip_frontmatter(content: str) -> str:
     return content.strip()
 
 
+def _parse_frontmatter_dict(content: str) -> Optional[dict]:
+    """Extract YAML frontmatter as a flat dict. Returns None if no frontmatter."""
+    if not content.startswith("---"):
+        return None
+    end = content.find("---", 3)
+    if end == -1:
+        return None
+    yaml_block = content[3:end].strip()
+    result = {}
+    for line in yaml_block.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip()
+        val = val.strip().strip('"')
+        # Simple list detection: [a, b, c]
+        if val.startswith("[") and val.endswith("]"):
+            inner = val[1:-1]
+            result[key] = [v.strip().strip('"') for v in inner.split(",") if v.strip()]
+        else:
+            result[key] = val
+    return result
+
+
 def content_hash(body: str) -> str:
     """Compute SHA-256 content hash (first 16 hex chars) of markdown body."""
     return "sha256:" + hashlib.sha256(body.strip().encode('utf-8')).hexdigest()[:16]
@@ -439,6 +466,57 @@ def cmd_batch(args):
     print(json.dumps(summary), file=sys.stderr)
 
 
+def cmd_push_properties(args):
+    """Output property update payload for MCP notion-update-page call."""
+    file_path = Path(args.file)
+    if not file_path.exists():
+        print(json.dumps({"error": f"file not found: {args.file}"}), file=sys.stderr)
+        sys.exit(1)
+
+    config_path = Path(args.config_path)
+    if not config_path.exists():
+        print(json.dumps({"error": f"config not found: {args.config_path}"}), file=sys.stderr)
+        sys.exit(1)
+
+    with open(config_path, encoding="utf-8") as f:
+        config = json.load(f)
+    property_map = config.get("property_map", {})
+
+    content = file_path.read_text(encoding="utf-8")
+    front = _parse_frontmatter_dict(content)
+    if front is None:
+        print(json.dumps({"error": "no YAML frontmatter found in file"}), file=sys.stderr)
+        sys.exit(1)
+
+    notion_id = front.get("notion_id")
+    if not notion_id:
+        print(json.dumps({"error": "notion_id not found in frontmatter"}), file=sys.stderr)
+        sys.exit(1)
+
+    properties = {}
+    for notion_prop_name, prop_config in property_map.items():
+        yaml_key = prop_config.get("yaml_key")
+        prop_type = prop_config.get("type", "rich_text")
+        if not yaml_key or yaml_key in ("title", "notion_id", "created", "last_edited", "last_synced"):
+            continue  # skip system fields
+        value = front.get(yaml_key)
+        if value is None:
+            continue
+        # Multi-select must be serialised as JSON array string
+        if prop_type == "multi_select":
+            if isinstance(value, list):
+                properties[notion_prop_name] = json.dumps(value)
+            else:
+                properties[notion_prop_name] = json.dumps([value])
+        else:
+            properties[notion_prop_name] = str(value)
+
+    print(json.dumps({
+        "page_id": notion_id,
+        "properties": properties
+    }))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Prepare local markdown files for pushing to Notion",
@@ -517,6 +595,23 @@ def main():
         help="Lock the Notion page after push",
     )
     push_content_parser.set_defaults(func=cmd_push_content)
+
+    # 'push-properties' subcommand
+    push_props_parser = subparsers.add_parser(
+        "push-properties",
+        help="Output property payload for notion-update-page MCP call",
+    )
+    push_props_parser.add_argument(
+        "--file",
+        required=True,
+        help="Path to local markdown file with YAML frontmatter",
+    )
+    push_props_parser.add_argument(
+        "--config-path",
+        default=".notion-sync/config.json",
+        help="Path to config.json (default: .notion-sync/config.json)",
+    )
+    push_props_parser.set_defaults(func=cmd_push_properties)
 
     args = parser.parse_args()
 
