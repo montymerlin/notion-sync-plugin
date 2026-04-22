@@ -8,7 +8,7 @@
       "name": "notion-sync",
       "source": "./",
       "description": "Bidirectional sync between Notion databases and local markdown files — guided setup, change detection, conflict resolution, and content format conversion. Works in Claude Code and Claude Cowork.",
-      "version": "0.2.2",
+      "version": "0.3.0",
       "author": {
         "name": "Monty Merlin"
       },
