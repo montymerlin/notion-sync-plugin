@@ -34,14 +34,15 @@ If content was added locally but never pushed, pulling the Notion version will o
 
 **Prevention:** Always run a bidirectional sync (not pull-only). The change detection will classify the file as a conflict if both sides changed, giving the user a chance to review.
 
-### Silent content fabrication with subagents
+### Content fabrication on large document pushes
 
-**Never use subagents (Agent tool) to push content to Notion.** Two failure modes discovered:
+**Never use `notion-update-page` with `replace_content` for document bodies.** Two failure modes:
 
-1. **Content fabrication**: If a subagent can't access a file (e.g. temp files in `/tmp/`), it may generate content from training data instead of erroring — resulting in fabricated text on the Notion page.
-2. **Stale IDs produce broken links**: If page IDs are passed as hardcoded values to a subagent rather than read from the live manifest, any stale or incorrect IDs silently produce broken internal links.
+1. **Main-context fabrication**: When the agent calls `notion-update-page(command="replace_content", new_str="<content>")`, the `new_str` value is generated token-by-token by the LLM — even if the agent has just read the staging file. For documents over a few thousand words (and near-certain for documents over ~10K words), at least one substantive deviation from the source will occur. The EthicHub document (85K chars) was visibly "AI-regenerated" — structure preserved, prose rewritten.
 
-**Rule:** Always run sync operations in the main conversation context. Always load the manifest fresh from disk before every operation.
+2. **Subagent fabrication**: If a subagent can't access a file (e.g. temp files in `/tmp/`), it may generate content from training data instead of erroring.
+
+**Rule:** Always use `push_markdown.py push-content` for content writes. This reads the staging file as bytes and sends it to the Blocks API directly — no LLM generation in the data path.
 
 ## Property handling
 

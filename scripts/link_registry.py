@@ -98,12 +98,11 @@ class LinkRegistry:
         self.by_page = {}
 
         # Extract entries from manifest
-        entries = manifest.get("pages", [])
+        entries = manifest.get("pages", {})
         count = 0
 
-        for entry in entries:
+        for page_id, entry in entries.items():
             local_file = entry.get("local_file")
-            page_id = entry.get("page_id")
 
             # Only add if both local_file and page_id exist
             if local_file and page_id:
@@ -175,8 +174,7 @@ class LinkRegistry:
                     return f"[{text}](https://www.notion.so/{page_id})"
                 else:
                     stats["links_unresolved"] += 1
-                    # Append comment after the link
-                    return f"[{text}]({file_path}) <!-- unresolved: {file_path} -->"
+                    return f"{text} *(local file)*"
 
             converted = re.sub(pattern, replace_fn, converted)
 

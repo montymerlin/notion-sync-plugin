@@ -149,59 +149,52 @@ Set `last_notion_edit`, `last_synced` (current time), and `content_hash` (hash o
 
 ## Push procedure (local → Notion)
 
-### 1. Read and parse the local file
+### 1. Determine push target
 
-Separate YAML frontmatter from body. The `notion_id` in frontmatter (or manifest) identifies the target page.
+Run `manifest.py diff` to get `push_target` for each changed file:
+- `properties_only` — only frontmatter fields changed; body unchanged
+- `content_only` — body changed; properties unchanged
+- `both` — both changed
+- `none` — skip
 
-### 2. Convert links for Notion
+### 2. Prepare staging file (if content push needed)
 
-- `[text](filename.md)` → `[text](https://www.notion.so/<page-id>)` (look up in manifest)
-- `[text](../other-folder/file.md)` → `text *(local file)*` (non-synced files can't link in Notion)
-- Anchor links (`#section-name`) — leave as-is (they render as blue text in Notion but don't break)
-- External URLs — leave untouched
-
-### 3. Push content
-
-```
-notion-update-page(
-  page_id="<notion_id>",
-  command="replace_content",
-  new_str="<body without YAML frontmatter>"
-)
+```bash
+python scripts/push_markdown.py prepare \
+  --file <local_path> \
+  --output .notion-sync/push-staging/<slug>.md
 ```
 
-Use `replace_content` for full replacement. This is safer than targeted `update_content` which requires exact string matching against Notion's internal format.
+Strips frontmatter, converts local links to Notion URLs via link registry, computes content hash. Output goes to `.notion-sync/push-staging/`.
 
-**If push fails due to child pages**: Notion refuses to replace content if it would delete child pages. Options:
-1. Add `allow_deleting_content: true` (destructive — deletes child pages)
-2. Use `update_content` for targeted changes only
-3. Push properties only, skip content
+### 3. Push content (if push_target is `content_only` or `both`)
 
-### 4. Push properties
-
-```
-notion-update-page(
-  page_id="<notion_id>",
-  command="update_properties",
-  properties={
-    "Property Name": "<value>"
-  }
-)
+```bash
+python scripts/push_markdown.py push-content \
+  --page-id <notion_id> \
+  --file .notion-sync/push-staging/<slug>.md
 ```
 
-**Critical**: Multi-select properties must be serialised as JSON array strings:
-```json
-{
-  "Category": "[\"Value1\", \"Value2\"]",
-  "Topics": "[\"Topic1\", \"Topic2\"]"
-}
+Reads staging file, converts to Notion blocks, clears existing page content, pushes in batches of 100. Requires `NOTION_TOKEN` in `.notion-sync/.env`.
+
+### 4. Push properties (if push_target is `properties_only` or `both`)
+
+```bash
+python scripts/push_markdown.py push-properties \
+  --file <local_path> \
+  --config-path .notion-sync/config.json
 ```
 
-Plain strings silently drop all but one value.
+Outputs JSON payload. Pass `output.properties` to:
+```
+notion-update-page(page_id=<page_id>, command="update_properties", properties=<output.properties>)
+```
+
+Multi-select values are automatically serialised as JSON array strings. No token required.
 
 ### 5. Update manifest and frontmatter
 
-- Manifest: set `content_hash`, `last_synced`, `last_notion_edit` to current time
+- Manifest: update `content_hash`, `last_synced`, and `properties` snapshot
 - Local file: update `last_synced` in YAML frontmatter
 
 ## Filename generation
@@ -282,16 +275,6 @@ python scripts/manifest.py discover --folders research/ report/
 
 When creating new files from Notion, if multiple sync folders exist, the agent should ask the user which folder to place the file in.
 
-## replace_content vs update_content decision tree
+## Content push strategy
 
-Choose the right push strategy based on the situation:
-
-| Scenario | Strategy | Why |
-|---|---|---|
-| New page or full rewrite | `replace_content` | Clean slate, no format matching issues |
-| Section-level edit | `update_content` with `old_str`/`new_str` | Preserves child pages, less disruptive |
-| Page has child pages | `update_content` only | `replace_content` will fail or delete children |
-| Content has complex Notion formatting | `update_content` | Preserving formatting you can't reproduce |
-| First push (page was empty) | `replace_content` | No existing content to preserve |
-
-When using `update_content`, always fetch the page first to get the exact current content for `old_str` matching.
+All content writes use `push_markdown.py push-content` regardless of page size or scenario. See Decision 007 in DECISIONS.md.

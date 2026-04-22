@@ -94,7 +94,25 @@ The `slug_overrides` object allows custom filename mappings for titles that don'
 }
 ```
 
-## Step 5: Initial population
+## Step 5: Set up your Notion integration token
+
+The sync needs a Notion integration token to push content directly via the Blocks API (bypasses the AI generation path for large documents).
+
+1. Go to `https://www.notion.so/my-integrations` → **New integration** → give it a name → **Internal** → copy the **Internal Integration Secret** (starts with `ntn_` or `secret_`)
+2. In Notion, open your target database page → click `...` (top right) → **Connections** → find your integration → **Connect**
+3. Create the token file:
+   ```bash
+   echo "NOTION_TOKEN=ntn_your_token_here" > .notion-sync/.env
+   ```
+4. Verify the token loads correctly (no API call is made):
+   ```bash
+   python scripts/push_markdown.py push-content --dry-run
+   ```
+   Expected output: `{"dry_run": true, "blocks": 0}` — confirms token loads and script is functional.
+
+The `.notion-sync/.env` file is gitignored. Each operator creates their own.
+
+## Step 6: Initial population
 
 Discover all pages in the Notion database:
 
@@ -114,12 +132,12 @@ Discover all pages in the Notion database:
 
 Do NOT pull content yet — that's the job of `/notion-sync`. The setup creates the config, manifest, and link registry infrastructure.
 
-## Step 6: Confirm and advise
+## Step 7: Confirm and advise
 
 Tell the user:
 
 - The sync is configured. Run `/notion-sync` to perform the first bidirectional sync.
-- Add the entire `.notion-sync/` directory to `.gitignore` if only one person runs the sync. If sharing the property mappings with collaborators, gitignore only `manifest.json` and `link-registry.json` and track `config.json`.
+- Add the entire `.notion-sync/` directory to `.gitignore` — this covers your config, manifest, link registry, staging files, and integration token. All of these are personal operator state.
 - The Notion Sync MCP connector must be available for the sync skill to work.
 
 ## Files created
