@@ -174,8 +174,7 @@ class LinkRegistry:
                     return f"[{text}](https://www.notion.so/{page_id})"
                 else:
                     stats["links_unresolved"] += 1
-                    # Append comment after the link
-                    return f"[{text}]({file_path}) <!-- unresolved: {file_path} -->"
+                    return f"{text} *(local file)*"
 
             converted = re.sub(pattern, replace_fn, converted)
 
