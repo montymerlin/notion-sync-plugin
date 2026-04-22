@@ -30,15 +30,13 @@ If dirty: ask the user to commit first. Use the `/commit` skill (git-cowork plug
 
 ## Step 2: Build inventories
 
-**Local inventory:** Use the helper script to generate a diff preview:
+**Local inventory:** Run the diff script to generate a complete change picture — it checks both property changes (frontmatter fields vs. manifest snapshot) and content changes (hash comparison), and ensures the link registry is fresh before running:
 
 ```bash
 python scripts/manifest.py diff --manifest-path .notion-sync/manifest.json
 ```
 
-This compares content hashes and timestamps for all tracked files, returning categorised changes: `local_changed`, `notion_changed`, `conflicts`, `new_local`, and `unchanged`. For the Notion-side check, first update `last_notion_edit` timestamps from Notion (Step 2b below) before running diff.
-
-Also check YAML property fields against the manifest — property-only changes (e.g. updating draft status) count as local changes even if the body hash is the same.
+Output includes `push_target` per changed file (`properties_only`, `content_only`, `both`, `none`), `property_diff` showing which fields changed, and `content_changed` flag. No separate property check is needed — the diff command handles it.
 
 **Notion inventory:** For exhaustive page discovery, fetch the data source schema which returns all pages:
 
@@ -68,12 +66,14 @@ Classify every page:
 Present the unified sync plan:
 
 ```
-Notion Sync Plan (bidirectional):
-  Pull from Notion:  N pages
-  Push to Notion:    N pages
-  Conflicts:         N pages (need resolution)
-  New in Notion:     N pages
-  Unchanged:         N pages (skipping)
+Notion Sync Plan:
+  Properties-only push:    N pages  (frontmatter changed, body unchanged — fast)
+  Full push (both):        N pages  (content + properties)
+  Content-only push:       N pages
+  Pull from Notion:        N pages
+  Conflicts:               N pages (need resolution)
+  New in Notion:           N pages
+  Unchanged:               N pages (skipping)
 ```
 
 List specific files in each category. **Wait for user confirmation before executing.**
@@ -102,24 +102,64 @@ For each page to pull, follow the pull procedure in `references/sync-engine.md`.
 6. Convert Notion page URLs to local markdown filenames using the link registry: `python scripts/link_registry.py convert-links --direction pull --content-file <pulled-content>`
 7. Build the file: YAML frontmatter + cleaned content body
 8. Write to the sync folder
-9. Update the manifest entry (timestamp, content hash)
+9. Capture the properties snapshot: for each property in the pull response, store its value in `manifest["pages"][page_id]["properties"]` keyed by `yaml_key`. This baseline is used by future diffs to detect property-only changes.
+10. Update the manifest entry (timestamp, content hash)
 
 ## Step 6: Execute pushes (local → Notion)
 
-For each page to push, follow the push procedure in `references/sync-engine.md`. In summary:
+For each page to push, use `push_target` from the diff output to decide which script calls to make.
 
-1. Prepare the file for push using the helper script:
-   ```bash
-   python scripts/push_markdown.py prepare --file <path> --output .notion-sync/push-staging/<filename>
-   ```
-   This strips frontmatter, converts local links to Notion URLs via the link registry, and computes the content hash.
-2. Push content via `notion-update-page(page_id, command="replace_content", new_str=<prepared body>)`
-   - For surgical edits to large pages, prefer `update_content` with targeted `old_str`/`new_str` pairs — this avoids replacing the entire page and is safer when child pages exist.
-3. Push properties via `notion-update-page(page_id, command="update_properties", properties={...})`
-   - Multi-select properties MUST be pushed as JSON array strings: `'["value1", "value2"]'`
-4. Update manifest entry and local file's `last_synced` in frontmatter
+**`notion-update-page` with `replace_content` is never called directly.** All content writes go through the direct Blocks API. All property writes go through MCP.
 
-If push fails due to child pages, tell the user and offer options (see `references/gotchas.md`).
+**Properties only (`push_target: "properties_only"`):**
+
+```bash
+python scripts/push_markdown.py push-properties \
+  --file <local_path> --config-path .notion-sync/config.json
+```
+
+Take the JSON output and call:
+```
+notion-update-page(page_id=<page_id>, command="update_properties", properties=<output.properties>)
+```
+
+Then update the manifest properties snapshot.
+
+**Content only (`push_target: "content_only"`):**
+
+```bash
+# 1. Prepare staging file (strip frontmatter, convert links, compute hash)
+python scripts/push_markdown.py prepare \
+  --file <local_path> \
+  --output .notion-sync/push-staging/<slug>.md
+
+# 2. Push content via direct Blocks API
+python scripts/push_markdown.py push-content \
+  --page-id <notion_id> \
+  --file .notion-sync/push-staging/<slug>.md
+```
+
+Then update manifest `content_hash` and `last_synced`.
+
+**Both content and properties (`push_target: "both"`):**
+
+```bash
+# 1. Prepare
+python scripts/push_markdown.py prepare \
+  --file <local_path> --output .notion-sync/push-staging/<slug>.md
+
+# 2. Push content
+python scripts/push_markdown.py push-content \
+  --page-id <notion_id> --file .notion-sync/push-staging/<slug>.md
+
+# 3. Push properties
+python scripts/push_markdown.py push-properties \
+  --file <local_path> --config-path .notion-sync/config.json
+```
+
+Followed by MCP call for properties (same as properties-only above), then manifest update for both hash and properties.
+
+If push fails due to child pages, see `references/gotchas.md`.
 
 ## Step 7: Handle new Notion pages
 
@@ -146,9 +186,9 @@ For pages found in Notion but not in the manifest:
 ## Important notes
 
 - **Always read `references/sync-engine.md` and `references/gotchas.md`** before running a sync. They contain critical operational knowledge built from real incidents.
-- **Never use subagents to push content to Notion** — this has caused silent content fabrication and broken links. See gotchas.
+- **Always use `push_markdown.py` for all content writes — never `notion-update-page` with `replace_content`.** The MCP content path passes text through LLM token generation and is unreliable for documents over a few thousand words. See `references/gotchas.md`.
+- **Token auto-loaded from `.notion-sync/.env` or `.env`.** Run `/notion-setup` if content pushes fail with token errors.
 - **Always load the manifest fresh** from `.notion-sync/manifest.json` — never cache or hardcode page IDs.
 - **Multi-select properties** require JSON array strings on push — plain strings silently drop values.
 - **Use helper scripts for link conversion and push preparation** — `link_registry.py` and `push_markdown.py` eliminate ad-hoc scripting and reduce errors.
 - **Content hash timing matters** — always compute the hash *after* link conversion, since converted content is what Notion stores. The `push_markdown.py` script handles this correctly.
-- **`replace_content` vs `update_content`:** Use `replace_content` for full page updates; use `update_content` with `old_str`/`new_str` for surgical edits when the page has child pages or you only changed specific sections.
