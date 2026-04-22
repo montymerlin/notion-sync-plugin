@@ -24,10 +24,16 @@ Examples:
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
+import urllib.request
+import urllib.error
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+
+sys.path.insert(0, str(Path(__file__).parent))
+from link_registry import LinkRegistry
 
 
 def strip_frontmatter(content: str) -> str:
@@ -44,67 +50,9 @@ def content_hash(body: str) -> str:
     return "sha256:" + hashlib.sha256(body.strip().encode('utf-8')).hexdigest()[:16]
 
 
-def load_link_registry(registry_path: Path) -> Dict:
-    """Load link registry from JSON file."""
-    if not registry_path.exists():
-        return {"by_file": {}}
-    try:
-        with open(registry_path, 'r') as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return {"by_file": {}}
-
-
-def convert_links(body: str, registry: Dict) -> Tuple[str, int, int]:
-    """
-    Convert local markdown links to Notion URLs.
-
-    Looks for [text](filename.md) patterns where filename.md is a relative .md link.
-    Uses registry['by_file'] to map filenames to Notion page URLs.
-
-    Returns:
-        Tuple of (converted_body, links_converted_count, links_unresolved_count)
-    """
-    by_file = registry.get("by_file", {})
-    converted = 0
-    unresolved = 0
-
-    # Pattern: [text](path.md) where path.md doesn't start with http and doesn't have anchors
-    # Match relative .md links only (not http://, not #anchor only)
-    pattern = r'\[([^\]]+)\]\(([a-zA-Z0-9\-_./]+\.md)\)'
-
-    def replace_link(match):
-        nonlocal converted, unresolved
-        text = match.group(1)
-        filename = match.group(2)
-
-        # Try to find in registry: first with folder prefix, then without
-        notion_url = None
-
-        if filename in by_file:
-            notion_url = by_file[filename].get("notion_url")
-        else:
-            # Try matching just the filename part (last component)
-            filename_only = filename.split('/')[-1]
-            for reg_filename, reg_data in by_file.items():
-                if reg_filename.endswith(filename_only):
-                    notion_url = reg_data.get("notion_url")
-                    break
-
-        if notion_url:
-            converted += 1
-            return f"[{text}]({notion_url})"
-        else:
-            unresolved += 1
-            return match.group(0)  # Leave unchanged
-
-    converted_body = re.sub(pattern, replace_link, body)
-    return converted_body, converted, unresolved
-
-
 def prepare_file(
     file_path: Path,
-    registry: Dict,
+    registry: LinkRegistry,
 ) -> Tuple[str, int, int, str]:
     """
     Prepare a single markdown file for Notion.
@@ -114,28 +62,23 @@ def prepare_file(
     """
     content = file_path.read_text(encoding='utf-8')
     body = strip_frontmatter(content)
-    converted_body, links_converted, links_unresolved = convert_links(body, registry)
+    converted_body, stats = registry.convert_links(body, "push")
     hash_value = content_hash(converted_body)
-
-    return converted_body, links_converted, links_unresolved, hash_value
+    return converted_body, stats["links_converted"], stats["links_unresolved"], hash_value
 
 
 def cmd_prepare(args):
     """Handle 'prepare' subcommand: single file mode."""
     file_path = Path(args.file)
-
     if not file_path.exists():
         print(f"Error: file not found: {file_path}", file=sys.stderr)
         sys.exit(1)
 
-    registry_path = Path(args.registry_path)
-    registry = load_link_registry(registry_path)
-
+    registry = LinkRegistry(registry_path=Path(args.registry_path))
     converted_body, links_converted, links_unresolved, hash_value = prepare_file(
         file_path, registry
     )
 
-    # Write body to output or stdout
     if args.output:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -143,7 +86,6 @@ def cmd_prepare(args):
     else:
         print(converted_body)
 
-    # Print JSON summary to stderr
     summary = {
         "file": str(file_path),
         "body_chars": len(converted_body),
@@ -162,7 +104,7 @@ def cmd_batch(args):
     manifest_path = Path(args.manifest_path)
 
     # Load registry and manifest
-    registry = load_link_registry(registry_path)
+    registry = LinkRegistry(registry_path=registry_path)
     manifest = {}
     if manifest_path.exists():
         try:
@@ -180,9 +122,6 @@ def cmd_batch(args):
     unchanged_files = []
 
     for file_path in sorted(files_to_process):
-        # Read frontmatter to extract notion_id
-        content = file_path.read_text(encoding='utf-8')
-        body = strip_frontmatter(content)
         converted_body, links_converted, links_unresolved, hash_value = prepare_file(
             file_path, registry
         )
