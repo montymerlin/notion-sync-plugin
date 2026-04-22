@@ -1,0 +1,6 @@
+.notion-sync/
+.worktrees/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
