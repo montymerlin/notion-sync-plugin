@@ -275,16 +275,6 @@ python scripts/manifest.py discover --folders research/ report/
 
 When creating new files from Notion, if multiple sync folders exist, the agent should ask the user which folder to place the file in.
 
-## replace_content vs update_content decision tree
+## Content push strategy
 
-Choose the right push strategy based on the situation:
-
-| Scenario | Strategy | Why |
-|---|---|---|
-| New page or full rewrite | `replace_content` | Clean slate, no format matching issues |
-| Section-level edit | `update_content` with `old_str`/`new_str` | Preserves child pages, less disruptive |
-| Page has child pages | `update_content` only | `replace_content` will fail or delete children |
-| Content has complex Notion formatting | `update_content` | Preserving formatting you can't reproduce |
-| First push (page was empty) | `replace_content` | No existing content to preserve |
-
-When using `update_content`, always fetch the page first to get the exact current content for `old_str` matching.
+All content writes use `push_markdown.py push-content` regardless of page size or scenario. See Decision 007 in DECISIONS.md.

@@ -428,6 +428,14 @@ def cmd_batch(args):
         if folder.exists():
             files_to_process.extend(folder.glob('**/*.md'))
 
+    # Build file_path → content_hash lookup from manifest pages
+    manifest_pages = manifest.get("pages", {}) if isinstance(manifest, dict) else {}
+    file_to_hash = {
+        entry.get("local_file"): entry.get("content_hash", "")
+        for entry in manifest_pages.values()
+        if entry.get("local_file")
+    }
+
     changed_files = []
     unchanged_files = []
 
@@ -438,8 +446,7 @@ def cmd_batch(args):
 
         # Check if content changed (compare hash with manifest)
         file_str = str(file_path)
-        manifest_entry = manifest.get(file_str, {})
-        manifest_hash = manifest_entry.get("content_hash")
+        manifest_hash = file_to_hash.get(file_str, "")
 
         if hash_value == manifest_hash:
             unchanged_files.append(file_str)
