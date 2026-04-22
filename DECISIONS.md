@@ -110,4 +110,47 @@ Architectural decisions for this plugin, logged in a lightweight ADR format. Eac
 **Alternatives Considered:**
 - *Keep Cowork-only positioning* — rejected. README already documented Claude Code CLI installation; the CLAUDE.md just hadn't caught up
 
+---
+
+## Decision 007: Direct API push + integration token as first-class config
+
+**Status:** Accepted
+**Date:** 2026-04-22
+
+**Context:** The v0.2 push path called `notion-update-page(command="replace_content", new_str=<content>)` via MCP. The `new_str` value is generated token-by-token by the LLM, making content fabrication near-certain for large documents. The EthicHub document (85K chars, ~300 blocks) was pushed as AI-regenerated prose. A workaround script calling the Notion Blocks API directly was written in the bridging-worlds consumer repo, confirming direct API push eliminates the problem.
+
+**Decision:** Notion integration token is required for content writes. `push_markdown.py push-content` reads the staging file as bytes and sends it to the Blocks API directly — no LLM generation in the path. MCP is retained for reads (`notion-fetch`, `notion-search`) and property writes (`notion-update-page update_properties`) since those paths don't pass generated prose.
+
+**Consequences:**
+- Content fabrication eliminated by design, not by workaround
+- Token setup adds one step to `/notion-setup`
+- Property-only changes remain token-free (use MCP)
+- bridging-worlds `.scripts/notion_push_content.py` can be retired
+
+**Alternatives Considered:**
+- MCP-only with documented size limits — rejected, data integrity failure not a performance issue
+- Token optional with MCP fallback — rejected, adds complexity without benefit for single-operator
+- Ecosystem research confirmed only `go-notion-md-sync` achieves bidirectional sync; all other tools are export-only, validating the custom plugin approach
+
+---
+
+## Decision 008: Manifest v2 with property snapshots
+
+**Status:** Accepted
+**Date:** 2026-04-22
+
+**Context:** The v1 manifest stored only a content hash per page. Property changes (e.g. updating `research_stage` in frontmatter) were detected by the SKILL.md agent manually, not by the diff script — making the detection inconsistent and the push unnecessarily heavy (any change triggered a full content push even if only frontmatter changed).
+
+**Decision:** Add `"properties"` snapshot per manifest entry (keyed by `yaml_key`). `manifest.py diff` now outputs `push_target` (`properties_only`, `content_only`, `both`, `none`) and `property_diff` per changed file. Property-only changes route to `push-properties` (fast, no token, no Blocks API call). Auto-migration from v1 adds `"properties": {}` to existing entries on first load.
+
+**Consequences:**
+- Properties-only changes are now fast, targeted, zero-fabrication-risk operations
+- Manifest format change (non-breaking — auto-migration on load)
+- `manifest.py diff` is the single source of truth for change classification
+- First sync after migration re-captures all property baselines
+
+**Alternatives Considered:**
+- Separate `property_hash` field — rejected, full snapshot enables per-field diffs and human-readable conflict display
+- Manual property inspection in SKILL.md — rejected, too slow and too easy to skip
+
 <!-- Agentic Scaffold v0.1.0 | adapted for Cowork plugin conventions -->
