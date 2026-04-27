@@ -1,11 +1,17 @@
 {
   "name": "notion-sync",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Bidirectional sync between Notion databases and local markdown files — with guided setup, change detection, conflict resolution, and content format conversion. Works in Claude Code and Claude Cowork.",
   "author": {
     "name": "Monty Merlin"
   },
   "repository": "https://github.com/montymerlin/notion-sync-plugin",
   "license": "MIT",
-  "keywords": ["notion", "sync", "markdown", "knowledge-base", "bidirectional"]
+  "keywords": [
+    "notion",
+    "sync",
+    "markdown",
+    "knowledge-base",
+    "bidirectional"
+  ]
 }

@@ -4,6 +4,27 @@ A narrative record of how this plugin evolves. Updated after significant work se
 
 ---
 
+## 2026-04-27 — v0.4.0: Skill rename — `notion-sync/` → `sync/`
+
+Renamed `skills/notion-sync/` to `skills/sync/` and updated the SKILL.md `name:` field from `notion-sync` to `sync`. The runtime ID changes from `notion-sync:notion-sync` (awkwardly doubled) to `notion-sync:sync` (clean). The plugin name itself stays `notion-sync` — it's only the skill that loses the redundant prefix.
+
+This is a breaking slash command rename, so the version bumps from 0.3.0 to 0.4.0 in both `plugin.json` and `marketplace.json`. README skills table and `notion-setup/SKILL.md` cross-references updated to point at the new runtime ID. SETUP.md packaging filenames bumped to `notion-sync-0.4.0.plugin`. The plugin filename, repository URL, and `.notion-sync/` runtime config dir are all unchanged — only the in-skill identifier moved.
+
+Anyone with the old plugin installed will need to re-install (or symlink) to pick up the rename. The `/notion-setup` skill is unaffected.
+
+
+## 2026-04-27 — Plugin audit pass + AGENTS.md added + skill name fix
+
+Brought the plugin in line with the portfolio canon. Created a new `AGENTS.md` as the canonical instruction file (folding in the Project Identity, Directory Structure, Naming, Stack Conventions, Design Principles, and Boundaries sections from the previous CLAUDE.md, plus a new "Packaging for Cowork" section). Reduced `CLAUDE.md` to a thin compatibility wrapper that points at AGENTS.md. This was the last plugin in the portfolio still using CLAUDE.md as canonical.
+
+Fixed the namespaced skill `name:` frontmatter bug — both SKILL.md files had `name: notion:<x>`; fixed to `notion-setup` and `notion-sync` (matching dir names).
+
+Also expanded the existing `.gitignore` from 6 patterns to the full portfolio template, added `SETUP.md` § "Quick Install (for AI agents)" decision tree with explicit Notion API key handling, Cowork 3-option packaging pattern, and global-vs-local Claude Code install split with `claude mcp add` guidance for the Notion connector. README.md "Requirements" line fixed: was referencing the old `git-cowork plugin` name, now correctly says `git-plugin`.
+
+## 2026-04-27 — Cowork packaging: SETUP.md as setup canon
+
+Added `SETUP.md` as the single source of truth for install pathways, Notion API credential setup, and host compatibility. `README.md`'s install/setup sections were trimmed to a brief pointer. The plugin is now packaged as `notion-sync-0.3.0.plugin` in `ops/plugins/_dist/` using the new `cowork-plugin-packager` skill. **Follow-up flagged**: this plugin still lacks `AGENTS.md` (only `CLAUDE.md` exists) — the canonical pattern across the portfolio is `AGENTS.md` as canon + `CLAUDE.md` as compatibility wrapper.
+
 ## 2026-04-22 — v0.3.0: Direct Blocks API push, manifest v2, targeted diffs
 
 The biggest architectural change since v0.2.0. Driven by a real failure: the EthicHub document (85K chars, ~300 blocks) came back from a push as visibly AI-regenerated prose — structure intact, content rewritten. The root cause is that `notion-update-page(replace_content, new_str=...)` generates `new_str` token-by-token through the LLM, making content drift near-certain for large documents.

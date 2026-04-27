@@ -10,16 +10,18 @@ Each markdown file has YAML frontmatter that maps to Notion page properties. The
 
 ## Skills
 
-| Skill | Trigger phrases | What it does |
-|-------|----------------|--------------|
-| `/notion-setup` | "set up notion sync", "connect notion", "link to notion" | First-time configuration — connects a Notion database, maps properties to YAML fields, creates config and manifest files |
-| `/notion-sync` | "sync", "notion sync", "pull from notion", "push to notion" | Bidirectional sync — detects changes, shows a plan, resolves conflicts, executes pulls and pushes |
+| Skill | Runtime ID | Trigger phrases | What it does |
+|-------|------------|-----------------|--------------|
+| `notion-setup` | `notion-sync:notion-setup` | "set up notion sync", "connect notion", "link to notion" | First-time configuration — connects a Notion database, maps properties to YAML fields, creates config and manifest files |
+| `sync` | `notion-sync:sync` | "sync", "notion sync", "pull from notion", "push to notion" | Bidirectional sync — detects changes, shows a plan, resolves conflicts, executes pulls and pushes |
+
+> **Note:** in v0.4.0 the sync skill's directory was renamed from `notion-sync/` to `sync/` to clean up the doubled runtime ID (`notion-sync:notion-sync` → `notion-sync:sync`). If you've memorized an older slash command or invocation, update it accordingly.
 
 ## How it works
 
-1. **Setup** (`/notion-setup`): Connect a Notion database, choose a local folder, and map Notion properties to YAML frontmatter fields. Creates `.notion-sync/config.json` (shareable settings) and `.notion-sync/manifest.json` (personal sync state).
+1. **Setup** (`notion-sync:notion-setup`): Connect a Notion database, choose a local folder, and map Notion properties to YAML frontmatter fields. Creates `.notion-sync/config.json` (shareable settings) and `.notion-sync/manifest.json` (personal sync state).
 
-2. **Sync** (`/notion-sync`): Compares local files and Notion pages to detect changes on both sides. Presents a unified plan (N to pull, N to push, N conflicts). Resolves conflicts one by one with your input. Executes and updates the manifest.
+2. **Sync** (`notion-sync:sync`): Compares local files and Notion pages to detect changes on both sides. Presents a unified plan (N to pull, N to push, N conflicts). Resolves conflicts one by one with your input. Executes and updates the manifest.
 
 ## File structure
 
@@ -42,23 +44,11 @@ your-project/
 ## Requirements
 
 - **Notion MCP** — the Notion connector must be available in your Cowork session or Claude Code CLI environment. The sync skill uses `notion-search`, `notion-fetch`, `notion-update-page`, and `notion-create-pages`.
-- **git-cowork plugin** (recommended) — the sync workflow uses `/commit` for safe, structured commits after sync operations.
+- **git-plugin** (recommended) — the sync workflow uses `/commit` for safe, structured commits after sync operations.
 
 ## Installation
 
-### Claude Desktop (Cowork)
-
-Open the `.plugin` file in Claude Desktop, or install from the plugin marketplace.
-
-### Claude Code CLI
-
-Copy the skills to your global or project skills directory:
-
-```bash
-git clone https://github.com/montymerlin/notion-sync-plugin.git
-cp -r notion-sync-plugin/skills/* ~/.claude/skills/
-cp -r notion-sync-plugin/scripts/ ~/.claude/scripts/notion-sync/
-```
+See [SETUP.md](SETUP.md) for installation steps, compatibility matrix, credential setup, and known quirks across all hosts (Cowork, Claude Code CLI, API direct, etc.).
 
 ## Collaboration notes
 

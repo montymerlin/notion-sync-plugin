@@ -1,15 +1,15 @@
 ---
-name: notion:setup
+name: notion-setup
 description: >
   Set up bidirectional Notion sync in the current folder. Use when the user says
   "set up notion sync", "connect notion", "configure notion sync", "link this folder
   to notion", or wants to establish a new sync between a Notion database and local
-  markdown files. Also triggers when the notion-sync skill detects no existing config.
+  markdown files. Also triggers when the sync skill detects no existing config.
 ---
 
 # Notion Sync Setup
 
-Guide the user through connecting a Notion database to a local folder for bidirectional markdown sync. Creates the config and manifest files needed by the `/notion-sync` skill.
+Guide the user through connecting a Notion database to a local folder for bidirectional markdown sync. Creates the config and manifest files needed by the `/sync` skill.
 
 ## Prerequisites
 
@@ -130,13 +130,13 @@ Discover all pages in the Notion database:
    ```
 6. Show the user: "Found N pages, matched M to local files. Ready to run first sync?"
 
-Do NOT pull content yet — that's the job of `/notion-sync`. The setup creates the config, manifest, and link registry infrastructure.
+Do NOT pull content yet — that's the job of `/sync`. The setup creates the config, manifest, and link registry infrastructure.
 
 ## Step 7: Confirm and advise
 
 Tell the user:
 
-- The sync is configured. Run `/notion-sync` to perform the first bidirectional sync.
+- The sync is configured. Run `/sync` to perform the first bidirectional sync.
 - Add the entire `.notion-sync/` directory to `.gitignore` — this covers your config, manifest, link registry, staging files, and integration token. All of these are personal operator state.
 - The Notion Sync MCP connector must be available for the sync skill to work.
 

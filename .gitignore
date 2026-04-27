@@ -1,6 +1,36 @@
+# Notion-sync runtime state (per-user; not committed)
 .notion-sync/
+
+# Worktrees
 .worktrees/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
+.venv/
+
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build artifacts
+_dist/
+*.plugin
+*.zip
+
+# Logs
+*.log
+
+# Node (in case future MCP server is added)
+node_modules/
+
+# Claude Code per-user settings (NOT committed; project-level instructions belong in AGENTS.md)
+.claude/settings.local.json
