@@ -138,7 +138,11 @@ class LinkRegistry:
         return self.by_page.get(page_id)
 
     def convert_links(
-        self, content: str, direction: str
+        self,
+        content: str,
+        direction: str,
+        source_dir: str = "",
+        fallback_urls: dict = None,
     ) -> Tuple[str, Dict[str, int]]:
         """
         Convert markdown links between local files and Notion URLs.
@@ -168,13 +172,36 @@ class LinkRegistry:
                 text = match.group(1)
                 file_path = match.group(2)
 
+                # 1. Direct registry lookup
                 page_id = self.lookup_file(file_path)
+
+                # 2. Resolve relative to source_dir and retry
+                if not page_id and source_dir:
+                    try:
+                        resolved = str(
+                            (Path(source_dir) / file_path)
+                            .resolve()
+                            .relative_to(Path(".").resolve())
+                        )
+                        page_id = self.lookup_file(resolved)
+                    except ValueError:
+                        resolved = file_path  # outside repo root — use raw path for fallback
+                else:
+                    resolved = file_path
+
                 if page_id:
                     stats["links_converted"] += 1
                     return f"[{text}](https://www.notion.so/{page_id})"
-                else:
-                    stats["links_unresolved"] += 1
-                    return f"{text} *(local file)*"
+
+                # 3. Public-URL fallback (caller-supplied; None means skip)
+                if fallback_urls:
+                    public_url = fallback_urls.get(resolved)
+                    if public_url:
+                        stats["links_converted"] += 1
+                        return f"[{text}]({public_url})"
+
+                stats["links_unresolved"] += 1
+                return f"{text} *(local file)*"
 
             converted = re.sub(pattern, replace_fn, converted)
 
@@ -244,7 +271,8 @@ def cmd_convert_links(args) -> None:
         content = sys.stdin.read()
 
     # Convert links
-    converted, stats = registry.convert_links(content, args.direction)
+    source_dir = getattr(args, "source_dir", "") or ""
+    converted, stats = registry.convert_links(content, args.direction, source_dir=source_dir)
 
     # Output converted content to stdout
     print(converted, end="")
@@ -301,6 +329,10 @@ def main() -> None:
         "--content-file",
         type=Path,
         help="Read content from file instead of stdin",
+    )
+    convert_parser.add_argument(
+        "--source-dir", default="",
+        help="Directory of the source file, used to resolve relative links against the repo root"
     )
 
     args = parser.parse_args()

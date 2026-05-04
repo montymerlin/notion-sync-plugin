@@ -226,33 +226,33 @@ def markdown_to_blocks(markdown: str) -> list:
 
 
 def _clear_page_blocks(page_id: str, token: str) -> int:
-    """Delete all existing blocks from a page, skipping archived ones."""
-    deleted = skipped = 0
+    """Delete all existing blocks from a page. Collects all IDs first, then deletes."""
+    # Collect all IDs before any deletions — prevents cursor invalidation mid-pagination
+    all_blocks = []
     cursor = None
     while True:
-        path = f"/blocks/{page_id}/children"
+        path = f"/blocks/{page_id}/children?page_size=100"
         if cursor:
-            path += f"?start_cursor={cursor}"
+            path += f"&start_cursor={cursor}"
         result = _notion_request("GET", path, token)
-        blocks = result.get("results", [])
-        if not blocks:
+        all_blocks.extend(result.get("results", []))
+        if not result.get("has_more"):
             break
-        for block in blocks:
-            if block.get("archived", False):
+        cursor = result.get("next_cursor")
+
+    deleted = skipped = 0
+    for block in all_blocks:
+        if block.get("archived", False):
+            skipped += 1
+            continue
+        try:
+            _notion_request("DELETE", f"/blocks/{block['id']}", token)
+            deleted += 1
+        except RuntimeError as e:
+            if "archived" in str(e).lower():
                 skipped += 1
-                continue
-            try:
-                _notion_request("DELETE", f"/blocks/{block['id']}", token)
-                deleted += 1
-            except RuntimeError as e:
-                if "archived" in str(e).lower():
-                    skipped += 1
-                else:
-                    raise
-        if result.get("has_more"):
-            cursor = result.get("next_cursor")
-        else:
-            break
+            else:
+                raise
     return deleted
 
 
@@ -363,6 +363,7 @@ def content_hash(body: str) -> str:
 def prepare_file(
     file_path: Path,
     registry: LinkRegistry,
+    fallback_urls: dict = None,
 ) -> Tuple[str, int, int, str]:
     """
     Prepare a single markdown file for Notion.
@@ -372,7 +373,10 @@ def prepare_file(
     """
     content = file_path.read_text(encoding='utf-8')
     body = strip_frontmatter(content)
-    converted_body, stats = registry.convert_links(body, "push")
+    source_dir = str(file_path.parent)
+    converted_body, stats = registry.convert_links(
+        body, "push", source_dir=source_dir, fallback_urls=fallback_urls
+    )
     hash_value = content_hash(converted_body)
     return converted_body, stats["links_converted"], stats["links_unresolved"], hash_value
 
