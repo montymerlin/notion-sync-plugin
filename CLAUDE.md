@@ -1,13 +1,8 @@
 # CLAUDE.md — notion-sync
 
-Canonical instructions for this repo live in [AGENTS.md](AGENTS.md). Read that first and treat it as the source of truth.
+Before doing anything else in this repo, Read `AGENTS.md` in full. It is the canonical instruction set for this repo; this file is a thin Claude compatibility wrapper and assumes you have read `AGENTS.md` first.
 
-This file is a Claude compatibility wrapper. When working here:
-
-- Read `AGENTS.md` first
-- Treat `AGENTS.md` as the source of truth
-- Use `.claude-plugin/` as Claude-specific packaging metadata only
-- Keep any Claude-only notes thin and local to this wrapper
+In Claude Code (CLI), an `@AGENTS.md` directive will expand recursively. In Cowork (desktop), that expansion is not reliable, so the explicit imperative above is required — do not skip it.
 
 ## Claude-specific notes
 
