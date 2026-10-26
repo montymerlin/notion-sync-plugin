@@ -72,4 +72,4 @@ These can be used standalone or by the sync skill.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

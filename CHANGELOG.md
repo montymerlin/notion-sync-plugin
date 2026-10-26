@@ -4,6 +4,12 @@ A narrative record of how this plugin evolves. Updated after significant work se
 
 ---
 
+## 2026-10-26 — The licence text ships with the code
+
+The plugin always declared MIT in its manifest and README but shipped no licence text, and MIT's one condition is that its notice goes with every copy. The repo now has a `LICENSE` file (Copyright (c) 2026 Monty Bryant), and the README's licence section points to it. No behaviour changes, so no version bump.
+
+---
+
 ## 2026-04-27 — v0.4.0: Skill rename — `notion-sync/` → `sync/`
 
 Renamed `skills/notion-sync/` to `skills/sync/` and updated the SKILL.md `name:` field from `notion-sync` to `sync`. The runtime ID changes from `notion-sync:notion-sync` (awkwardly doubled) to `notion-sync:sync` (clean). The plugin name itself stays `notion-sync` — it's only the skill that loses the redundant prefix.

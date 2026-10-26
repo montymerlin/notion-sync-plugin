@@ -40,6 +40,7 @@ notion-sync-plugin/
 ├── DECISIONS.md                 # Architectural decision log
 ├── ROADMAP.md                   # Future directions
 ├── README.md                    # Human-facing overview
+├── LICENSE                      # MIT
 └── .gitignore
 ```
 
