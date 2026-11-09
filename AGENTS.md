@@ -6,7 +6,8 @@ Canonical repo instructions for `notion-sync-plugin`.
 
 - **Name:** notion-sync
 - **Type:** Host-agnostic Notion ↔ markdown sync skills + Python helpers, with Claude plugin packaging compatibility
-- **Version:** 0.4.0
+- **Version:** 0.5.0
+- **Status:** Retired 2026-11-09 (Decision 009). Unmaintained; changes are limited to keeping the retirement notice accurate.
 - **Stack:** Python scripts (stdlib only) + Markdown skill specs
 - **Purpose:** Keep a Notion database and local markdown folders in sync — changes flow both directions with conflict detection and user-driven resolution
 - **Repository:** https://github.com/montymerlin/notion-sync-plugin

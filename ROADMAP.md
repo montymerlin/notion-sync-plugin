@@ -1,5 +1,7 @@
 # Roadmap — notion-sync
 
+> **Closed 2026-11-09.** The plugin is retired (Decision 009). Nothing here will be built.
+
 Where this plugin could go. Items here are aspirations, not commitments — a place to capture ideas and future directions.
 
 When an item gets evaluated, the outcome is logged in [DECISIONS.md](DECISIONS.md).

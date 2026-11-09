@@ -4,6 +4,10 @@ A narrative record of how this plugin evolves. Updated after significant work se
 
 ---
 
+## 2026-11-09 — v0.5.0: Retired
+
+The plugin is retired and unmaintained. Its one real user, the Ostara Garden, retired Notion sync in July 2026 and moved collaboration to Google Docs, and nothing has used it since. The README now opens with a retirement notice; the manifests move to 0.5.0 with a "Retired" description so an install shows it. Skills and scripts are left as they were, as a record. See Decision 009.
+
 ## 2026-10-26 — The licence text ships with the code
 
 The plugin always declared MIT in its manifest and README but shipped no licence text, and MIT's one condition is that its notice goes with every copy. The repo now has a `LICENSE` file (Copyright (c) 2026 Monty Bryant), and the README's licence section points to it. No behaviour changes, so no version bump.

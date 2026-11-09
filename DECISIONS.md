@@ -154,3 +154,14 @@ Architectural decisions for this plugin, logged in a lightweight ADR format. Eac
 - Manual property inspection in SKILL.md — rejected, too slow and too easy to skip
 
 <!-- Agentic Scaffold v0.1.0 | adapted for Cowork plugin conventions -->
+
+## Decision 009: Retire the plugin (2026-11-09)
+
+**Context:** The plugin was built for bidirectional Notion ↔ markdown sync, chiefly for the Bridging Worlds garden (now the Ostara Garden). That garden retired Notion sync on 2026-07-20 and moved collaboration to Google Docs; the plugin has had no functional change since May 2026 and no installs on its maintainer's machine since then. Both Claude and ChatGPT now ship their own Notion connectors.
+
+**Decision:** Retire the plugin. The README opens with a retirement notice, the manifests move to 0.5.0 with a "Retired" description, and the code stays in place as a record rather than being deleted. No further fixes.
+
+**Consequences:** Anyone still using it keeps a working copy but gets no updates; Notion API changes may break it without notice. The ROADMAP is closed.
+
+**Alternatives considered:** *Keep it maintained for a possible future need* — no user, so upkeep with no return. *Delete the repo* — loses the record and breaks links.
+

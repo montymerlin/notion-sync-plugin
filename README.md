@@ -1,5 +1,7 @@
 # notion-sync
 
+> **Retired 2026-11-09 — no longer maintained.** This plugin hasn't been used since July 2026, when its main user (the Ostara Garden, then Bridging Worlds) moved collaboration from Notion to Google Docs. It gets no fixes or updates. If you need Notion from an agent today, use the Notion connector built into Claude or ChatGPT. The rest of this README describes the plugin as it was. Reasoning: [DECISIONS.md](DECISIONS.md), Decision 009.
+
 Bidirectional sync between Notion databases and local markdown files for Claude Cowork.
 
 ## What it does
